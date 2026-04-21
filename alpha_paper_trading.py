@@ -338,12 +338,26 @@ PERIODS = {
 }
 
 COMPANY_MAP = {
+    # English
     "apple":"AAPL","microsoft":"MSFT","google":"GOOGL","alphabet":"GOOGL",
     "amazon":"AMZN","meta":"META","facebook":"META","tesla":"TSLA",
     "nvidia":"NVDA","netflix":"NFLX","amd":"AMD","intel":"INTC",
     "uber":"UBER","airbnb":"ABNB","palantir":"PLTR","coinbase":"COIN",
-    "teva":"TEVA","טבע":"TEVA","check point":"CHKP","nice":"NICE",
-    "elbit":"ESLT","אלביט":"ESLT",
+    "arm":"ARM","arm holdings":"ARM","jpmorgan":"JPM","jp morgan":"JPM",
+    "goldman":"GS","goldman sachs":"GS","bank of america":"BAC",
+    "visa":"V","mastercard":"MA","broadcom":"AVGO","salesforce":"CRM",
+    "adobe":"ADBE","oracle":"ORCL","qualcomm":"QCOM","shopify":"SHOP",
+    "spotify":"SPOT","snap":"SNAP","paypal":"PYPL","block":"SQ",
+    "disney":"DIS","pfizer":"PFE","moderna":"MRNA","abbvie":"ABBV",
+    "exxon":"XOM","chevron":"CVX","berkshire":"BRK-B",
+    "check point":"CHKP","checkpoint":"CHKP","nice":"NICE","elbit":"ESLT",
+    "teva":"TEVA",
+    # Hebrew
+    "אפל":"AAPL","מיקרוסופט":"MSFT","גוגל":"GOOGL","אמזון":"AMZN",
+    "מטא":"META","פייסבוק":"META","טסלה":"TSLA","נביידיה":"NVDA",
+    "נטפליקס":"NFLX","אובר":"UBER","פאלאנטיר":"PLTR",
+    "טבע":"TEVA","צ'ק פוינט":"CHKP","נייס":"NICE",
+    "אלביט":"ESLT","ויזה":"V","מסטרקארד":"MA","קוינבייס":"COIN",
 }
 
 CATEGORIES = {
@@ -387,7 +401,22 @@ STOCK_DESCS = {
 
 # ── Helpers ──
 def resolve(raw: str) -> str:
-    return COMPANY_MAP.get(raw.strip().lower(), raw.strip().upper())
+    """Convert company name or partial input to ticker symbol."""
+    cleaned = raw.strip()
+    lower   = cleaned.lower()
+    # Exact map match
+    if lower in COMPANY_MAP:
+        return COMPANY_MAP[lower]
+    # Already a short ticker
+    upper = cleaned.upper()
+    if len(upper) <= 5 and upper.replace("-","").replace(".","").isalpha():
+        return upper
+    # Partial match — starts with
+    for key, val in COMPANY_MAP.items():
+        if key.startswith(lower) or lower.startswith(key):
+            return val
+    return upper
+
 
 def is_il(t: str) -> bool:
     return t.upper().endswith((".TA", ".TLV"))
@@ -1578,17 +1607,123 @@ lh       = float(df['High'].iloc[-1])
 ll       = float(df['Low'].iloc[-1])
 lv       = float(df['Volume'].iloc[-1]) if 'Volume' in df.columns else 0
 
-# ── HEADER — Google Finance Style ──
-st.markdown(
-    f'<div style="padding:16px 0 4px;direction:rtl;">'
-    f'<div style="font-size:1.55rem;font-weight:700;color:#e6edf3;line-height:1.2;">'
-    f'{company} {il}</div>'
-    f'<div style="color:#8b949e;font-size:.78rem;margin-top:2px;">'
-    f'{ticker} · {info.get("exchange","") or ""} · {info.get("currency","USD") or "USD"}'
-    f'</div>'
-    f'</div>',
-    unsafe_allow_html=True
-)
+# ── HEADER — שם חברה + חיפוש בצד ימין ──
+_h_col_name, _h_col_search = st.columns([3, 2])
+
+with _h_col_name:
+    st.markdown(
+        f'<div style="padding:14px 0 4px;direction:rtl;">'
+        f'<div style="font-size:1.45rem;font-weight:700;color:#e6edf3;line-height:1.2;">'
+        f'{company} {il}</div>'
+        f'<div style="color:#8b949e;font-size:.75rem;margin-top:2px;">'
+        f'{ticker} · {info.get("exchange","") or ""} · {info.get("currency","USD") or "USD"}'
+        f'</div></div>',
+        unsafe_allow_html=True
+    )
+
+with _h_col_search:
+    st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
+
+    # ── Smart Search: ticker OR company name ──
+    if 'search_results' not in st.session_state:
+        st.session_state.search_results = []
+    if 'search_query'   not in st.session_state:
+        st.session_state.search_query   = ""
+
+    @st.cache_data(ttl=300)
+    def yahoo_search(query: str) -> list:
+        """Search Yahoo Finance for tickers by name or symbol."""
+        try:
+            url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=6&newsCount=0&listsCount=0"
+            r   = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}, timeout=6)
+            if r.status_code == 200:
+                data = r.json()
+                results = []
+                for q in data.get("quotes", []):
+                    sym_y  = q.get("symbol","")
+                    name_y = q.get("longname") or q.get("shortname") or sym_y
+                    type_y = q.get("quoteType","")
+                    exch_y = q.get("exchDisp","")
+                    if type_y in ("EQUITY","ETF") and sym_y:
+                        results.append({"sym":sym_y,"name":name_y,"type":type_y,"exch":exch_y})
+                return results[:6]
+        except: pass
+        return []
+
+    _s_in = st.text_input(
+        "search_header", value="",
+        placeholder="🔍  סימול או שם חברה — AAPL, Tesla, טבע...",
+        label_visibility="collapsed", key="header_search"
+    )
+
+    sb1, sb2 = st.columns(2)
+    _do_search  = sb1.button("🔍 חפשי", key="header_search_btn", use_container_width=True)
+    _do_direct  = sb2.button("▶ ישירות", key="header_go", type="primary", use_container_width=True)
+
+    def _try_ticker(sym_try):
+        try:
+            h = yf.Ticker(sym_try).history(period="1mo")
+            return not h.empty
+        except:
+            return False
+
+    def _set_ticker(sym_found):
+        st.session_state.ticker         = sym_found
+        st.session_state.err            = ""
+        st.session_state.ai_res         = None
+        st.session_state.search_results = []
+        st.session_state.search_query   = ""
+        if sym_found not in st.session_state.recent:
+            st.session_state.recent.insert(0, sym_found)
+            st.session_state.recent = st.session_state.recent[:8]
+        save_user_data()
+        st.rerun()
+
+    # ── Direct mode: resolve + try ──
+    if _do_direct and _s_in.strip():
+        _r = resolve(_s_in.strip())
+        _candidates = [_r]
+        if not _r.endswith(".TA"): _candidates.append(_r + ".TA")
+        else: _candidates.append(_r.replace(".TA",""))
+        _found = next((c for c in _candidates if _try_ticker(c)), None)
+        if _found:
+            _set_ticker(_found)
+        else:
+            st.session_state.search_results = yahoo_search(_s_in.strip())
+            if not st.session_state.search_results:
+                st.error(f"'{_r}' לא נמצא")
+
+    # ── Search mode: Yahoo search ──
+    if _do_search and _s_in.strip():
+        st.session_state.search_results = yahoo_search(_s_in.strip())
+        st.session_state.search_query   = _s_in.strip()
+        if not st.session_state.search_results:
+            st.warning("לא נמצאו תוצאות")
+
+    # ── Show search results ──
+    if st.session_state.search_results:
+        st.markdown(
+            '<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;'
+            'overflow:hidden;margin-top:4px;">',
+            unsafe_allow_html=True
+        )
+        for _res in st.session_state.search_results:
+            _clr_exch = "#388bfd" if "TLV" in _res["exch"] or "TA" in _res["exch"] else "#8b949e"
+            st.markdown(
+                f'<div style="padding:8px 12px;border-bottom:1px solid #21262d;direction:rtl;">'
+                f'<span style="font-weight:700;color:#388bfd;font-size:.82rem;">{_res["sym"]}</span>'
+                f'<span style="color:#c9d1d9;font-size:.75rem;margin-right:7px;">{_res["name"][:30]}</span>'
+                f'<span style="color:{_clr_exch};font-size:.65rem;float:left;">{_res["exch"]}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            if st.button(f"▶ {_res['sym']}", key=f"res_{_res['sym']}", use_container_width=True):
+                _set_ticker(_res["sym"])
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("✕ סגור", key="close_results"):
+            st.session_state.search_results = []
+            st.rerun()
+
 
 # Price + change line
 w52l = info.get("fiftyTwoWeekLow"); w52h = info.get("fiftyTwoWeekHigh")
@@ -1607,6 +1742,7 @@ st.markdown(
 )
 
 st.markdown('<div style="height:2px;"></div>', unsafe_allow_html=True)
+
 
 # ── MAIN TABS ──
 # ── Tab groups ──
@@ -1748,41 +1884,18 @@ with thome:
 
     mkt_pills, mkt_status = home_market_status()
 
-    # Header block
-    h_left, h_right = st.columns([3, 2])
-    with h_left:
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:10px;padding:8px 0 4px;">'
-            f'<div style="width:32px;height:32px;background:linear-gradient(135deg,#1f6feb,#388bfd);'
-            f'border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.95rem;">📈</div>'
-            f'<div>'
-            f'<div style="font-size:1.1rem;font-weight:800;color:#e6edf3;letter-spacing:-.3px;">Alpha Charts Pro</div>'
-            f'<div style="display:flex;gap:10px;align-items:center;margin-top:2px;">'
-            + "  ·  ".join(mkt_pills) + f'  {mkt_status}'
-            + f'</div></div></div>',
-            unsafe_allow_html=True
-        )
-
-    with h_right:
-        h_si = st.text_input("search", value="", placeholder="🔍  חפשי מניה...",
-                             label_visibility="collapsed", key="home_search_v2")
-        if st.button("חפשי", key="home_go2", type="primary", use_container_width=True):
-            if h_si.strip():
-                r = resolve(h_si.strip())
-                try:
-                    test = yf.Ticker(r).history(period="5d")
-                    if not test.empty:
-                        st.session_state.ticker = r
-                        st.session_state.ai_res = None
-                        if r not in st.session_state.recent:
-                            st.session_state.recent.insert(0, r)
-                            st.session_state.recent = st.session_state.recent[:8]
-                        save_user_data()
-                        st.rerun()
-                    else:
-                        st.error(f"'{r}' לא נמצא")
-                except:
-                    st.error("שגיאה בטעינה")
+    # Header — branding + market status only (search is in main header)
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0 4px;">'
+        f'<div style="width:30px;height:30px;background:linear-gradient(135deg,#1f6feb,#388bfd);'
+        f'border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;">📈</div>'
+        f'<div>'
+        f'<div style="font-size:1rem;font-weight:800;color:#e6edf3;letter-spacing:-.3px;">Alpha Charts Pro</div>'
+        f'<div style="display:flex;gap:10px;align-items:center;margin-top:2px;">'
+        + "  ·  ".join(mkt_pills) + f'  {mkt_status}'
+        + f'</div></div></div>',
+        unsafe_allow_html=True
+    )
 
     # Recent quick-access
     if st.session_state.get("recent"):
@@ -4231,7 +4344,7 @@ with t1:
 # TAB 2 — DECISION MODULE
 # ════════════════════════════════════════
 with t2:
-    an_sub1, an_sub2, an_sub3 = st.tabs(["🎯 סיכום והחלטה", "🤖 AI ניתוח מתקדם", "⚠️ Position Sizing"])
+    an_sub1, an_sub2, an_sub3, an_sub4 = st.tabs(["🎯 סיכום והחלטה", "🤖 AI ניתוח מתקדם", "📊 סטאפ המשך מגמה", "⚠️ Position Sizing"])
 
     with an_sub1:
         if df is not None:
@@ -4252,6 +4365,491 @@ with t2:
             st.error("לא ניתן לטעון נתונים. בחרי מניה תקינה.")
 
     with an_sub3:
+        # ── Pattern Chart — Expansion / Contraction / Breakout ──
+
+        try:
+            if df is not None and len(df) >= 30:
+                df_pat = df.tail(60).copy()
+                cl_pat = df_pat['Close'].astype(float)
+                hi_pat = df_pat['High'].astype(float)
+                lo_pat = df_pat['Low'].astype(float)
+                op_pat = df_pat['Open'].astype(float)
+
+                # ── Detect phases ──
+                roll_range  = (hi_pat - lo_pat).rolling(5).mean()
+                idx         = df_pat.index
+                r_max       = roll_range.quantile(0.65)
+                r_min       = roll_range.quantile(0.35)
+                exp_mask    = (roll_range >= r_max)
+                cont_mask   = (roll_range <= r_min)
+                recent_high = hi_pat.rolling(20).max().shift(1)
+                bk_mask     = (cl_pat > recent_high) & (cl_pat.index >= idx[-15])
+
+                # MA trend
+                ma20_pat   = cl_pat.rolling(20).mean()
+                ma50_pat   = cl_pat.rolling(50).mean() if len(cl_pat) >= 50 else ma20_pat
+                cur_price  = float(cl_pat.iloc[-1])
+                prev_price = float(cl_pat.iloc[-6])
+                momentum   = (cur_price - prev_price) / prev_price * 100
+
+                has_expansion   = exp_mask.any()
+                has_contraction = cont_mask.any()
+                has_breakout    = bk_mask.any()
+                trend_up        = float(ma20_pat.iloc[-1]) > float(ma20_pat.iloc[-10])
+                above_ma20      = cur_price > float(ma20_pat.iloc[-1])
+                rsi_val         = float(df['RSI'].iloc[-1]) if 'RSI' in df.columns else 50
+
+                # ── Breakout level for display ──
+                bk_level = float(recent_high.iloc[-1]) if not recent_high.iloc[-1] != recent_high.iloc[-1] else None
+
+                # ── Dynamic state detection ──
+                if has_breakout and trend_up and momentum > 0:
+                    _state       = "breakout"
+                    _state_color = "#4ade80"
+                    _state_icon  = "🚀"
+                    _state_label = "פריצה פעילה"
+                    _summary     = (
+                        f"המניה פרצה מעל רמת ההתנגדות ב-{bk_level:.2f} {sym} ומציגה המשך מגמה שורית. "
+                        f"המומנטום חיובי ({momentum:+.1f}%) והמחיר נמצא מעל הממוצע הנע. "
+                        f"ניתן לבחון כניסה לפוזיציה לונג עם סטופ מתחת לנר הפריצה."
+                    )
+                elif has_contraction and not has_breakout and trend_up:
+                    _state       = "contraction"
+                    _state_color = "#a78bfa"
+                    _state_icon  = "⏳"
+                    _state_label = "שלב התכווצות"
+                    bk_target    = f"{bk_level:.2f} {sym}" if bk_level else "השיא האחרון"
+                    _summary     = (
+                        f"המניה נמצאת בשלב התבססות לאחר מהלך חזק — הטווח מצטמצם והתנודתיות יורדת. "
+                        f"ממתינים לפריצה מעל {bk_target} לאישור המשך המגמה. "
+                        f"{'RSI במצב נייטרלי (' + str(int(rsi_val)) + ') — אין קניית יתר.' if 40 < rsi_val < 65 else ''}"
+                    )
+                elif not trend_up or momentum < -2:
+                    _state       = "bearish"
+                    _state_color = "#f87171"
+                    _state_icon  = "⚠️"
+                    _state_label = "מגמה לא מאשרת"
+                    _summary     = (
+                        f"המגמה אינה מאשרת סטאפ שורי — המחיר יורד ({momentum:+.1f}%) "
+                        f"{'ומתחת לממוצע הנע 20.' if not above_ma20 else '.'} "
+                        f"הסטאפ חלש במצב הנוכחי. מומלץ להמתין לאיתות חיובי לפני כניסה."
+                    )
+                else:
+                    _state       = "forming"
+                    _state_color = "#38bdf8"
+                    _state_icon  = "📐"
+                    _state_label = "סטאפ בהיווצרות"
+                    _summary     = (
+                        f"המניה בשלבי בניית הסטאפ — זוהה מהלך עלייה קודם ועכשיו מתפתחת התכווצות. "
+                        f"יש לעקוב אחר שיא הבסיס ב-{bk_level:.2f} {sym}. "
+                        f"כניסה מוקדמת מדי לפני פריצה מאושרת מגדילה את הסיכון."
+                    ) if bk_level else (
+                        "המניה בשלבי בניית הסטאפ — יש לעקוב אחר שיא הבסיס לאישור פריצה."
+                    )
+
+                # ── Dynamic summary card ──
+                st.markdown(
+                    f'<div style="background:rgba(13,15,20,0.8);border:1px solid {_state_color}44;'
+                    f'border-right:3px solid {_state_color};border-radius:12px;'
+                    f'padding:14px 18px;margin-bottom:12px;direction:rtl;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+                    f'<span style="font-size:1rem;">{_state_icon}</span>'
+                    f'<span style="font-size:.82rem;font-weight:700;color:{_state_color};">{_state_label}</span>'
+                    f'<span style="font-family:JetBrains Mono,monospace;font-size:.75rem;'
+                    f'color:rgba(255,255,255,.35);margin-right:auto;">{ticker} · {cur_price:.2f} {sym}</span>'
+                    f'</div>'
+                    f'<p style="color:rgba(255,255,255,.62);font-size:.8rem;line-height:1.7;margin:0;">{_summary}</p>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+                # ── Phase metrics row ──
+                pm1, pm2, pm3, pm4 = st.columns(4)
+                for col_m, lbl_m, val_m, clr_m in [
+                    (pm1, "Expansion",   "✅ זוהה" if has_expansion else "—",   "#38bdf8" if has_expansion else "#8b949e"),
+                    (pm2, "Contraction", "✅ זוהה" if has_contraction else "—", "#a78bfa" if has_contraction else "#8b949e"),
+                    (pm3, "Breakout",    "✅ פרץ"  if has_breakout else "⏳ ממתין", "#4ade80" if has_breakout else "#d29922"),
+                    (pm4, "RSI",         f"{rsi_val:.0f}", "#f87171" if rsi_val>70 else ("#4ade80" if rsi_val<30 else "#e6edf3")),
+                ]:
+                    col_m.markdown(
+                        f'<div style="background:#161b22;border:1px solid #21262d;border-radius:9px;'
+                        f'padding:9px 10px;text-align:center;">'
+                        f'<div style="color:#8b949e;font-size:.6rem;text-transform:uppercase;margin-bottom:3px;">{lbl_m}</div>'
+                        f'<div style="font-family:JetBrains Mono,monospace;font-size:.82rem;'
+                        f'font-weight:600;color:{clr_m};">{val_m}</div>'
+                        f'</div>', unsafe_allow_html=True
+                    )
+
+                st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+
+                # ── Build Plotly figure ──
+                fig_pat = go.Figure()
+
+                # Candlesticks
+                fig_pat.add_trace(go.Candlestick(
+                    x=idx,
+                    open=op_pat, high=hi_pat, low=lo_pat, close=cl_pat,
+                    increasing_line_color='#3fb950', decreasing_line_color='#f85149',
+                    increasing_fillcolor='rgba(63,185,80,0.7)',
+                    decreasing_fillcolor='rgba(248,81,73,0.7)',
+                    line_width=1,
+                    name="מחיר",
+                ))
+
+                # Phase shading helper
+                def add_phase_band(mask, color, label, opacity=0.08):
+                    in_zone = False
+                    start = None
+                    for i, (dt, val) in enumerate(mask.items()):
+                        if val and not in_zone:
+                            start = dt; in_zone = True
+                        elif not val and in_zone:
+                            fig_pat.add_vrect(
+                                x0=start, x1=dt,
+                                fillcolor=color, opacity=opacity,
+                                line_width=0,
+                            )
+                            in_zone = False
+                    if in_zone and start:
+                        fig_pat.add_vrect(
+                            x0=start, x1=idx[-1],
+                            fillcolor=color, opacity=opacity,
+                            line_width=0,
+                        )
+
+                add_phase_band(exp_mask,  "#0ea5e9", "Expansion",   0.09)
+                add_phase_band(cont_mask, "#8b5cf6", "Contraction", 0.09)
+                add_phase_band(bk_mask,  "#3fb950", "Breakout",    0.12)
+
+                # Annotations for phase labels
+                for label, color, mask in [
+                    ("① Expansion",   "#38bdf8", exp_mask),
+                    ("② Contraction", "#a78bfa", cont_mask),
+                    ("③ Breakout",    "#4ade80", bk_mask),
+                ]:
+                    zone_idx = idx[mask]
+                    if len(zone_idx) > 0:
+                        mid = zone_idx[len(zone_idx)//2]
+                        fig_pat.add_annotation(
+                            x=mid,
+                            y=hi_pat.max() * 1.002,
+                            text=label,
+                            showarrow=False,
+                            font=dict(size=10, color=color),
+                            bgcolor="rgba(13,15,20,0.7)",
+                            borderpad=3,
+                        )
+
+                # Breakout level line
+                if bk_mask.any():
+                    bl = float(recent_high[bk_mask].iloc[0]) if bk_mask.any() else None
+                    if bl:
+                        fig_pat.add_hline(
+                            y=bl,
+                            line_dash="dot",
+                            line_color="rgba(74,222,128,0.5)",
+                            line_width=1,
+                            annotation_text="פריצה",
+                            annotation_font_color="rgba(74,222,128,0.8)",
+                            annotation_font_size=10,
+                            annotation_position="left",
+                        )
+
+                fig_pat.update_layout(
+                    height=340,
+                    paper_bgcolor="#0d0f14",
+                    plot_bgcolor="#0d0f14",
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    showlegend=False,
+                    xaxis=dict(
+                        showgrid=False, zeroline=False,
+                        color="#8b949e", tickfont=dict(size=10),
+                        rangeslider=dict(visible=False),
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor="rgba(255,255,255,0.05)",
+                        zeroline=False,
+                        color="#8b949e",
+                        tickfont=dict(size=10),
+                        side="right",
+                    ),
+                    font=dict(color="#8b949e"),
+                )
+                fig_pat.update_xaxes(showspikes=False)
+                fig_pat.update_yaxes(showspikes=False)
+
+                st.plotly_chart(fig_pat, use_container_width=True)
+
+                # Legend
+                st.markdown(
+                    '<div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;direction:rtl;">'
+                    '<span style="font-size:.7rem;"><span style="color:#38bdf8;">■</span> Expansion — מהלך חזק</span>'
+                    '<span style="font-size:.7rem;"><span style="color:#a78bfa;">■</span> Contraction — התכווצות</span>'
+                    '<span style="font-size:.7rem;"><span style="color:#4ade80;">■</span> Breakout — פריצה</span>'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+
+        except Exception as _e:
+            st.info(f"לא ניתן לסמן שלבים אוטומטית: {_e}")
+
+        st.markdown('<hr style="margin:8px 0 12px;border-color:rgba(255,255,255,0.06);"/>', unsafe_allow_html=True)
+
+        # ── Trend Continuation Setup Card ──
+        import streamlit.components.v1 as _stc
+
+        # Determine quality from technical score
+        try:
+            _t_score = calc_technical_score(df).get("score", 0) or 0
+            _setup_quality = "high" if _t_score >= 65 else ("medium" if _t_score >= 40 else "low")
+        except:
+            _setup_quality = "medium"
+
+        _quality_colors = {
+            "high":   {"color":"#4ade80","bg":"rgba(22,163,74,0.10)","border":"rgba(22,163,74,0.28)","label":"High Quality","qdesc":"מגמה ברורה, בסיס מסודר, פריצה נקייה","dots":[1,1,0]},
+            "medium": {"color":"#fbbf24","bg":"rgba(202,138,4,0.10)", "border":"rgba(202,138,4,0.28)", "label":"Medium Quality","qdesc":"מבנה טוב עם חולשה מסוימת","dots":[1,0,0]},
+            "low":    {"color":"#f87171","bg":"rgba(220,38,38,0.10)", "border":"rgba(220,38,38,0.28)", "label":"Low Quality","qdesc":"מבנה לא יציב או פריצה חלשה","dots":[0,0,0]},
+        }
+        _qc = _quality_colors[_setup_quality]
+        _dot_colors = ["#4ade80","#fbbf24","#f87171"]
+
+        def _dots_html(dots):
+            return "".join(
+                f'<span style="width:8px;height:8px;border-radius:50%;background:{"" + _dot_colors[i] if dots[i] else "rgba(255,255,255,0.1)"};display:inline-block;"></span>'
+                for i in range(3)
+            )
+
+        _html = f"""
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8"/>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:transparent; font-family:'Segoe UI',Heebo,Arial,sans-serif; color:#e6edf3; }}
+  .card {{ border-radius:16px; background:#0d0f14; border:1px solid rgba(255,255,255,0.07); overflow:hidden; max-width:680px; }}
+  .sec {{ padding:18px 22px; border-bottom:1px solid rgba(255,255,255,0.05); }}
+  .sec-lbl {{ font-size:10px; color:rgba(255,255,255,0.22); text-transform:uppercase; letter-spacing:.12em; font-weight:500; margin-bottom:12px; }}
+  .stage {{ border-radius:11px; padding:11px 13px; border:1px solid; }}
+  .plan-row {{ border-radius:9px; padding:10px 13px; border:1px solid; margin-bottom:6px; }}
+  .reason-dot {{ width:5px; height:5px; border-radius:50%; background:rgba(74,222,128,.55); flex-shrink:0; margin-top:5px; }}
+  .q-btn {{ border-radius:9px; padding:9px 11px; border:1px solid rgba(255,255,255,0.07); background:transparent; cursor:pointer; width:100%; text-align:right; margin-bottom:5px; transition:all .12s; color:inherit; font-family:inherit; }}
+  .q-btn:hover {{ background:rgba(255,255,255,0.04); }}
+  .banner {{ margin:0 14px; padding:10px 14px; border-radius:9px; border:1px solid; }}
+  .disc {{ margin:12px 14px 14px; padding:9px 13px; border-radius:9px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); display:flex; align-items:flex-start; gap:8px; }}
+  .grid3 {{ display:grid; grid-template-columns:1fr 20px 1fr 20px 1fr; gap:4px; align-items:stretch; }}
+  .arrow-col {{ display:flex; align-items:center; justify-content:center; }}
+  .grid2 {{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }}
+  .reasons-list {{ list-style:none; display:flex; flex-direction:column; gap:8px; }}
+  .reasons-list li {{ display:flex; align-items:flex-start; gap:8px; }}
+  .q-list {{ display:flex; flex-direction:column; }}
+  .dots-row {{ display:flex; gap:5px; align-items:center; }}
+  .tag {{ display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:99px; font-size:10px; font-weight:600; background:rgba(22,163,74,.12); border:1px solid rgba(22,163,74,.3); color:#4ade80; }}
+  .pulse {{ width:6px; height:6px; border-radius:50%; background:#4ade80; animation:pulse 2s infinite; display:inline-block; }}
+  @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.4}} }}
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- HEADER -->
+  <div class="sec" style="padding:20px 22px 18px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div style="flex:1">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-bottom:7px">
+          <span style="font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.2);text-transform:uppercase">Pattern Analysis</span>
+          <span class="tag"><span class="pulse"></span>סיגנל פעיל</span>
+        </div>
+        <div style="font-size:20px;font-weight:500;color:#fff;line-height:1.2;margin-bottom:3px">סטאפ המשך מגמה</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.22);font-family:monospace;letter-spacing:.05em">Expansion → Contraction → Breakout</div>
+      </div>
+      <div style="padding:9px 14px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);text-align:center;flex-shrink:0">
+        <div style="font-family:monospace;font-weight:600;font-size:14px;color:#fff">{ticker}</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.18);margin-top:3px;text-transform:uppercase;letter-spacing:.08em">סימול</div>
+      </div>
+    </div>
+    <p style="margin-top:12px;font-size:13px;line-height:1.75;color:rgba(255,255,255,.42)">
+      המניה מציגה מהלך עלייה חזק, אחריו התכווצות בטווח המחיר, וכעת נבדקת אפשרות לפריצה נוספת כלפי מעלה.
+    </p>
+  </div>
+
+  <!-- STAGES -->
+  <div class="sec">
+    <div class="sec-lbl">מבנה הסטאפ</div>
+    <div class="grid3">
+      <div class="stage" style="background:rgba(14,165,233,.07);border-color:rgba(14,165,233,.2)">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+          <span style="width:19px;height:19px;border-radius:50%;background:rgba(14,165,233,.18);border:1px solid rgba(14,165,233,.3);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#38bdf8;flex-shrink:0">1</span>
+          <span style="font-size:12px;font-weight:500;color:#38bdf8">Expansion</span>
+        </div>
+        <p style="font-size:11px;color:rgba(255,255,255,.35);line-height:1.6">מהלך עלייה חזק עם נרות גדולים יחסית</p>
+      </div>
+      <div class="arrow-col">
+        <svg viewBox="0 0 12 12" fill="none" width="12" height="12"><path d="M2 6h8M7 3l3 3-3 3" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="stage" style="background:rgba(139,92,246,.07);border-color:rgba(139,92,246,.2)">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+          <span style="width:19px;height:19px;border-radius:50%;background:rgba(139,92,246,.18);border:1px solid rgba(139,92,246,.3);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#a78bfa;flex-shrink:0">2</span>
+          <span style="font-size:12px;font-weight:500;color:#a78bfa">Contraction</span>
+        </div>
+        <p style="font-size:11px;color:rgba(255,255,255,.35);line-height:1.6">הטווח מצטמצם, התנודתיות יורדת, והנרות נהיים קטנים יותר</p>
+      </div>
+      <div class="arrow-col">
+        <svg viewBox="0 0 12 12" fill="none" width="12" height="12"><path d="M2 6h8M7 3l3 3-3 3" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="stage" style="background:rgba(22,163,74,.07);border-color:rgba(22,163,74,.2)">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+          <span style="width:19px;height:19px;border-radius:50%;background:rgba(22,163,74,.18);border:1px solid rgba(22,163,74,.3);display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#4ade80;flex-shrink:0">3</span>
+          <span style="font-size:12px;font-weight:500;color:#4ade80">Breakout</span>
+        </div>
+        <p style="font-size:11px;color:rgba(255,255,255,.35);line-height:1.6">פריצה מעל אזור ההתבססות שעשויה להעיד על המשך מגמה</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRADE PLAN -->
+  <div class="sec">
+    <div class="sec-lbl">תוכנית מסחר</div>
+    <div class="plan-row" style="background:rgba(14,165,233,.06);border-color:rgba(14,165,233,.2)">
+      <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:3px">
+        <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.78)">כניסה</span>
+        <span style="font-size:10px;font-family:monospace;color:#38bdf8">Entry</span>
+      </div>
+      <p style="font-size:12px;color:rgba(255,255,255,.36);line-height:1.55">מעל שיא הבסיס</p>
+    </div>
+    <div class="plan-row" style="background:rgba(220,38,38,.06);border-color:rgba(220,38,38,.2)">
+      <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:3px">
+        <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.78)">סטופ לוס</span>
+        <span style="font-size:10px;font-family:monospace;color:#f87171">Stop Loss</span>
+      </div>
+      <p style="font-size:12px;color:rgba(255,255,255,.36);line-height:1.55">מתחת לשפל הבסיס או מתחת לנר הפריצה</p>
+    </div>
+    <div class="plan-row" style="background:rgba(22,163,74,.06);border-color:rgba(22,163,74,.2);margin-bottom:0">
+      <div style="display:flex;align-items:baseline;gap:7px;margin-bottom:3px">
+        <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.78)">יעד</span>
+        <span style="font-size:10px;font-family:monospace;color:#4ade80">Target</span>
+      </div>
+      <p style="font-size:12px;color:rgba(255,255,255,.36);line-height:1.55">לפי יחס סיכוי סיכון, התנגדות קרובה, או המשך מבני של המגמה</p>
+    </div>
+  </div>
+
+  <!-- REASONS + QUALITY -->
+  <div class="sec">
+    <div class="grid2">
+      <div>
+        <div class="sec-lbl">למה הסיגנל הזה</div>
+        <ul class="reasons-list">
+          <li><span class="reason-dot"></span><span style="font-size:12.5px;color:rgba(255,255,255,.46);line-height:1.4">מגמה עולה ברורה</span></li>
+          <li><span class="reason-dot"></span><span style="font-size:12.5px;color:rgba(255,255,255,.46);line-height:1.4">מהלך חזק קודם</span></li>
+          <li><span class="reason-dot"></span><span style="font-size:12.5px;color:rgba(255,255,255,.46);line-height:1.4">ירידה בתנודתיות</span></li>
+          <li><span class="reason-dot"></span><span style="font-size:12.5px;color:rgba(255,255,255,.46);line-height:1.4">התכווצות מסודרת בטווח</span></li>
+          <li><span class="reason-dot"></span><span style="font-size:12.5px;color:rgba(255,255,255,.46);line-height:1.4">פריצה מעל רמה ברורה</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="sec-lbl">איכות הסטאפ</div>
+        <div class="q-list" id="qlist">
+          <button class="q-btn" id="qb-high" onclick="selectQ('high')" style="border-color:rgba(22,163,74,.28);background:rgba(22,163,74,.10)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:5px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block"></span>
+                <span style="font-size:12px;font-weight:500;color:#4ade80">High Quality</span>
+              </div>
+              <span style="font-size:10px;color:rgba(255,255,255,.38)">מגמה ברורה, בסיס מסודר</span>
+            </div>
+          </button>
+          <button class="q-btn" id="qb-medium" onclick="selectQ('medium')">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:5px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.15);display:inline-block" id="qd-medium"></span>
+                <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,.28)" id="ql-medium">Medium Quality</span>
+              </div>
+              <span style="font-size:10px;color:rgba(255,255,255,.15)">מבנה טוב עם חולשה</span>
+            </div>
+          </button>
+          <button class="q-btn" id="qb-low" onclick="selectQ('low')">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:5px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.15);display:inline-block" id="qd-low"></span>
+                <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,.28)" id="ql-low">Low Quality</span>
+              </div>
+              <span style="font-size:10px;color:rgba(255,255,255,.15)">מבנה לא יציב</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BANNER -->
+  <div class="banner" id="banner" style="background:{_qc['bg']};border-color:{_qc['border']}">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="width:8px;height:8px;border-radius:50%;background:{_qc['color']};display:inline-block" id="b-dot"></span>
+      <span style="font-size:13px;font-weight:500;color:{_qc['color']}" id="b-label">{_qc['label']}</span>
+      <div class="dots-row" id="b-dots">
+        {_dots_html(_qc['dots'])}
+      </div>
+      <span style="font-size:11px;color:rgba(255,255,255,.32);margin-right:auto" id="b-desc">{_qc['qdesc']}</span>
+    </div>
+  </div>
+
+  <!-- DISCLAIMER -->
+  <div class="disc">
+    <svg viewBox="0 0 16 16" fill="none" width="13" height="13" style="color:rgba(255,255,255,.18);flex-shrink:0;margin-top:1px">
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M8 5v3.5M8 10v.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    <p style="font-size:11px;color:rgba(255,255,255,.2);line-height:1.6">הסיגנל מבוסס על מבנה מחיר ואינו מהווה המלצת השקעה.</p>
+  </div>
+
+</div>
+<script>
+const QD = {{
+  high:   {{color:"#4ade80", bg:"rgba(22,163,74,.10)",  border:"rgba(22,163,74,.28)",  label:"High Quality",   desc:"מגמה ברורה, בסיס מסודר, פריצה נקייה", dots:[1,1,0]}},
+  medium: {{color:"#fbbf24", bg:"rgba(202,138,4,.10)",  border:"rgba(202,138,4,.28)",  label:"Medium Quality", desc:"מבנה טוב עם חולשה מסוימת",             dots:[1,0,0]}},
+  low:    {{color:"#f87171", bg:"rgba(220,38,38,.10)",  border:"rgba(220,38,38,.28)",  label:"Low Quality",    desc:"מבנה לא יציב או פריצה חלשה",           dots:[0,0,0]}},
+}};
+const DC = ["#4ade80","#fbbf24","#f87171"];
+let cur = "{_setup_quality}";
+
+function selectQ(id) {{
+  cur = id;
+  const q = QD[id];
+  // banner
+  const b = document.getElementById("banner");
+  b.style.background = q.bg; b.style.borderColor = q.border;
+  document.getElementById("b-dot").style.background = q.color;
+  document.getElementById("b-label").style.color = q.color;
+  document.getElementById("b-label").textContent = q.label;
+  document.getElementById("b-desc").textContent = q.desc;
+  // dots
+  const bd = document.getElementById("b-dots");
+  bd.innerHTML = q.dots.map((on,i) =>
+    `<span style="width:8px;height:8px;border-radius:50%;background:${{on?DC[i]:"rgba(255,255,255,0.1)"}};display:inline-block;"></span>`
+  ).join("");
+  // buttons
+  ["high","medium","low"].forEach(k => {{
+    const qk = QD[k]; const on = k===id;
+    const btn = document.getElementById("qb-"+k);
+    btn.style.background   = on ? qk.bg   : "transparent";
+    btn.style.borderColor  = on ? qk.border : "rgba(255,255,255,0.07)";
+    const dot = document.getElementById("qd-"+k);
+    const lbl = document.getElementById("ql-"+k);
+    if(dot) {{ dot.style.background = on ? qk.color : "rgba(255,255,255,0.15)"; }}
+    if(lbl) {{ lbl.style.color = on ? qk.color : "rgba(255,255,255,0.28)"; }}
+  }});
+}}
+// fix active button dots/labels (high is pre-set in HTML)
+document.getElementById("qd-high") && (document.getElementById("qd-high").style.background = QD.high.color);
+document.getElementById("ql-high") && (document.getElementById("ql-high").style.color = QD.high.color);
+</script>
+</body>
+</html>
+"""
+        _stc.html(_html, height=820, scrolling=False)
+
+    with an_sub4:
         st.markdown(f"### ⚠️ Position Sizing — {ticker}")
         cp_ = get_live_price(ticker)
         cl_, cr_ = st.columns(2)
