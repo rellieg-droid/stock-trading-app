@@ -41,244 +41,520 @@ st_autorefresh(interval=60000, key="ar")
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ── בסיס ── */
-html,body,.stApp {
-  font-family:'Heebo',sans-serif!important;
-  background:#0d1117!important;
-  color:#c9d1d9!important;
-  direction:rtl!important;
+/* ═══════════════════════════════════════════════════
+   ALPHA CHARTS PRO — TRADING TERMINAL DESIGN SYSTEM
+   ═══════════════════════════════════════════════════ */
+
+/* ── COLOR TOKENS ── */
+:root {
+  /* Surfaces */
+  --c-base:       #080B0F;
+  --c-surface-1:  #0D1117;
+  --c-surface-2:  #131820;
+  --c-surface-3:  #1A2130;
+  --c-border:     rgba(255,255,255,0.07);
+  --c-border-md:  rgba(255,255,255,0.12);
+  --c-border-act: rgba(56,139,253,0.5);
+
+  /* Text */
+  --c-text-1:  #E8ECF1;
+  --c-text-2:  #7C8897;
+  --c-text-3:  #4A5568;
+  --c-text-dim:#2D3748;
+
+  /* Semantic */
+  --c-blue:    #1F6FEB;
+  --c-blue-lt: #388BFD;
+  --c-green:   #3FB950;
+  --c-red:     #F85149;
+  --c-amber:   #D29922;
+
+  /* Dim variants */
+  --c-green-dim: rgba(63,185,80,0.10);
+  --c-red-dim:   rgba(248,81,73,0.10);
+  --c-blue-dim:  rgba(31,111,235,0.10);
+  --c-amber-dim: rgba(210,153,34,0.10);
+
+  /* Typography */
+  --ff-ui:   'IBM Plex Sans', sans-serif;
+  --ff-mono: 'JetBrains Mono', monospace;
+
+  --fs-10: 0.625rem;   /* labels */
+  --fs-11: 0.6875rem;  /* micro */
+  --fs-12: 0.75rem;    /* caption */
+  --fs-13: 0.8125rem;  /* body-sm */
+  --fs-14: 0.875rem;   /* body */
+  --fs-16: 1rem;       /* h3 */
+  --fs-20: 1.25rem;    /* h2 */
+  --fs-28: 1.75rem;    /* price display */
+  --fs-36: 2.25rem;    /* hero price */
+
+  /* Spacing */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px;
+
+  /* Radius */
+  --r2: 2px; --r4: 4px; --r6: 6px; --r8: 8px;
+}
+
+/* ── BASE ── */
+html, body, .stApp {
+  font-family: var(--ff-ui) !important;
+  background: var(--c-base) !important;
+  color: var(--c-text-1) !important;
+  direction: rtl !important;
+  font-size: var(--fs-14) !important;
+  -webkit-font-smoothing: antialiased;
 }
 .block-container {
-  padding:.5rem 1rem!important;
-  max-width:100%!important;
-  direction:rtl!important;
-  text-align:right!important;
+  padding: var(--s2) var(--s4) !important;
+  max-width: 100% !important;
+  direction: rtl !important;
+}
+*, *::before, *::after { box-sizing: border-box; }
+div, p, span, label { direction: rtl !important; }
+.stMarkdown, .stText { text-align: right !important; }
+hr { border: none !important; border-top: 1px solid var(--c-border) !important; margin: var(--s3) 0 !important; }
+
+/* ── SIDEBAR ── */
+[data-testid="stSidebar"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+
+/* ═══════════════════════════
+   TAB BAR — Terminal toolbar
+   ═══════════════════════════ */
+.stTabs [data-baseweb="tab-list"] {
+  background: var(--c-surface-2) !important;
+  border-radius: var(--r4) !important;
+  padding: 2px !important;
+  gap: 1px !important;
+  border: 1px solid var(--c-border) !important;
+  border-bottom: 1px solid var(--c-border-md) !important;
+}
+.stTabs [data-baseweb="tab"] {
+  background: transparent !important;
+  color: var(--c-text-2) !important;
+  border-radius: var(--r4) !important;
+  border: none !important;
+  font-size: var(--fs-12) !important;
+  font-weight: 500 !important;
+  font-family: var(--ff-ui) !important;
+  padding: 4px 10px !important;
+  letter-spacing: 0.01em;
+  transition: all 0.1s ease !important;
+  text-transform: none !important;
+}
+.stTabs [data-baseweb="tab"]:hover {
+  color: var(--c-text-1) !important;
+  background: rgba(255,255,255,0.05) !important;
+}
+.stTabs [aria-selected="true"] {
+  background: var(--c-surface-3) !important;
+  color: var(--c-text-1) !important;
+  font-weight: 600 !important;
+  border: 1px solid var(--c-border-md) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
 }
 
-/* ── RTL על כל האלמנטים ── */
-div,p,span,label,h1,h2,h3,h4,h5 { direction:rtl!important; }
-.stMarkdown, .stText { text-align:right!important; }
-
-/* ── Sidebar ── */
-section[data-testid="stSidebar"] { background:#010409!important; border-right:1px solid #21262d!important; min-width:260px!important; }
-div[data-testid="stSidebarContent"] { direction:rtl!important; padding:.5rem; text-align:right!important; }
-
-/* ── מטריקות ── */
-.stMetric { background:#161b22!important; border:1px solid #21262d!important; border-radius:10px!important; padding:12px!important; }
-[data-testid="stMetricValue"] { font-family:'JetBrains Mono',monospace!important; font-weight:600!important; color:#e6edf3!important; }
-[data-testid="stMetricLabel"] { color:#8b949e!important; text-transform:uppercase; font-weight:500!important; }
-
-/* ── טאבים ── */
-.stTabs [data-baseweb="tab-list"] { background:#161b22!important; border-radius:10px!important; padding:3px!important; gap:3px!important; border:1px solid #21262d!important; }
-.stTabs [data-baseweb="tab"] { background:transparent!important; color:#8b949e!important; border-radius:7px!important; border:none!important; font-weight:500!important; }
-.stTabs [aria-selected="true"] { background:#1f6feb!important; color:white!important; font-weight:700!important; }
-
-/* ── Radio — hide dots, show as pill buttons ── */
+/* ═══════════════════════════
+   RADIO — Period / Chart Type
+   Segmented control terminal style
+   ═══════════════════════════ */
 div[role="radiogroup"] {
-  display: flex !important;
+  display: inline-flex !important;
   flex-direction: row !important;
-  gap: 2px !important;
-  background: #161b22 !important;
-  border: 1px solid #30363d !important;
-  border-radius: 8px !important;
-  padding: 3px !important;
+  gap: 0 !important;
+  background: var(--c-surface-2) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r4) !important;
+  padding: 0 !important;
+  overflow: hidden;
 }
 div[role="radiogroup"] label {
   background: transparent !important;
-  border-radius: 6px !important;
-  padding: 4px 10px !important;
+  border-radius: 0 !important;
+  padding: 3px 9px !important;
   cursor: pointer !important;
-  transition: all .12s !important;
+  border-left: 1px solid var(--c-border) !important;
+  margin: 0 !important;
+  transition: background 0.08s ease !important;
 }
+div[role="radiogroup"] label:first-child { border-left: none !important; }
 div[role="radiogroup"] label:has(input:checked) {
-  background: #1f6feb !important;
+  background: var(--c-surface-3) !important;
+  border-color: var(--c-border-md) !important;
 }
 div[role="radiogroup"] label span,
 div[role="radiogroup"] label p,
 .stRadio label span,
 .stRadio label p {
-  color: #8b949e !important;
-  font-size: .74rem !important;
-  font-weight: 600 !important;
+  color: var(--c-text-2) !important;
+  font-size: var(--fs-12) !important;
+  font-weight: 500 !important;
+  font-family: var(--ff-mono) !important;
+  letter-spacing: 0.02em !important;
 }
 div[role="radiogroup"] label:has(input:checked) span,
 div[role="radiogroup"] label:has(input:checked) p {
-  color: #ffffff !important;
+  color: var(--c-text-1) !important;
+  font-weight: 600 !important;
 }
 div[role="radiogroup"] label:hover span,
 div[role="radiogroup"] label:hover p {
-  color: #e6edf3 !important;
+  color: var(--c-text-1) !important;
 }
-/* hide radio dot */
-div[role="radiogroup"] input[type="radio"] {
-  display: none !important;
-}
+div[role="radiogroup"] input[type="radio"] { display: none !important; }
 div[role="radiogroup"] input:checked + div,
-div[role="radiogroup"] [data-testid="stMarkdownContainer"] {
-  display: none !important;
-}
+div[role="radiogroup"] [data-testid="stMarkdownContainer"] { display: none !important; }
 
-/* ── Buttons — trading style ── */
+/* ═══════════════════════════
+   BUTTONS — Compact terminal style
+   ═══════════════════════════ */
 .stButton > button {
-  background: #161b22 !important;
-  color: #c9d1d9 !important;
-  border: 1px solid #30363d !important;
-  border-radius: 7px !important;
-  font-family: 'Heebo', sans-serif !important;
-  font-size: .78rem !important;
-  font-weight: 600 !important;
-  padding: 5px 12px !important;
-  transition: all .12s !important;
+  background: var(--c-surface-2) !important;
+  color: var(--c-text-2) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r4) !important;
+  font-family: var(--ff-ui) !important;
+  font-size: var(--fs-12) !important;
+  font-weight: 500 !important;
+  padding: 3px 10px !important;
+  height: 28px !important;
+  line-height: 1 !important;
+  transition: all 0.08s ease !important;
   white-space: nowrap !important;
+  letter-spacing: 0.01em !important;
 }
 .stButton > button:hover {
-  background: #21262d !important;
-  color: #e6edf3 !important;
-  border-color: #58a6ff !important;
+  background: var(--c-surface-3) !important;
+  color: var(--c-text-1) !important;
+  border-color: var(--c-border-md) !important;
 }
+.stButton > button:active { transform: scale(0.97) !important; }
 .stButton > button[kind="primary"] {
-  background: #1f6feb !important;
-  color: #ffffff !important;
-  border-color: #1f6feb !important;
-}
-.stButton > button[kind="primary"]:hover {
-  background: #388bfd !important;
-  border-color: #388bfd !important;
-}
-
-
-/* ── שדות קלט ── */
-.stTextInput input,.stNumberInput input {
-  background:#161b22!important; color:#e6edf3!important;
-  border:1px solid #30363d!important; border-radius:8px!important;
-  text-align:right!important; direction:rtl!important;
-}
-
-/* ── התראות ── */
-.stSuccess { background:rgba(46,160,67,.1)!important;  border:1px solid rgba(46,160,67,.3)!important;  border-radius:8px!important; }
-.stError   { background:rgba(248,81,73,.1)!important;  border:1px solid rgba(248,81,73,.3)!important;  border-radius:8px!important; }
-.stInfo    { background:rgba(31,111,235,.1)!important; border:1px solid rgba(31,111,235,.3)!important; border-radius:8px!important; }
-.stWarning { background:rgba(210,153,34,.1)!important; border:1px solid rgba(210,153,34,.3)!important; border-radius:8px!important; }
-hr { border-color:#21262d!important; }
-
-/* ── Sidebar btn ── */
-button[data-testid="collapsedControl"] { background:#21262d!important; border:1px solid #30363d!important; border-radius:7px!important; }
-button[data-testid="collapsedControl"] svg { fill:#8b949e!important; }
-
-/* ── טבלאות ── */
-[data-testid="stDataFrame"] th { background:#161b22!important; color:#c9d1d9!important; font-size:.75rem!important; text-transform:uppercase; font-weight:700!important; }
-[data-testid="stDataFrame"] td { background:#0d1117!important; border-color:#21262d!important; font-family:'JetBrains Mono',monospace!important; color:#e6edf3!important; font-size:.82rem!important; }
-[data-testid="stDataFrame"] * { color:#e6edf3!important; }
-
-/* ── Checkbox labels (Indicators) ── */
-.stCheckbox label,
-.stCheckbox label p,
-.stCheckbox label span {
-  color: #c9d1d9 !important;
-  font-size: .82rem !important;
-  font-weight: 500 !important;
-}
-.stCheckbox label:hover span {
-  color: #e6edf3 !important;
-}
-/* checked state */
-.stCheckbox input:checked + label span,
-.stCheckbox input:checked ~ label span {
-  color: #e6edf3 !important;
-  font-weight: 700 !important;
-}
-
-/* ── Plotly tooltip — force LTR so box and text stay together ── */
-.js-plotly-plot .plotly .hoverlayer {
-  direction: ltr !important;
-  unicode-bidi: isolate !important;
-}
-.js-plotly-plot .plotly .hoverlayer .hovertext {
-  direction: ltr !important;
-  text-align: left !important;
-}
-
-/* ── Radio text (time range) ── */
-.stRadio label p, .stRadio label span, div[role="radiogroup"] label span {
-  color: #e6edf3 !important;
-  font-size: .82rem !important;
+  background: var(--c-blue) !important;
+  color: #fff !important;
+  border-color: var(--c-blue) !important;
   font-weight: 600 !important;
 }
-
-/* ── tooltip box ── */
-.tooltip-box {
-  background:#161b22;
-  border:1px solid #30363d;
-  border-radius:10px;
-  padding:8px 12px;
-  font-size:.75rem;
-  color:#8b949e;
-  margin-top:4px;
-  line-height:1.5;
+.stButton > button[kind="primary"]:hover {
+  background: var(--c-blue-lt) !important;
+  border-color: var(--c-blue-lt) !important;
 }
 
-/* ── Responsive font sizes ── */
-/* מחשב נייד / ברירת מחדל */
-:root {
-  --fs-xl:   1.9rem;
-  --fs-lg:   1.2rem;
-  --fs-md:   .88rem;
-  --fs-sm:   .78rem;
-  --fs-xs:   .68rem;
-  --fs-xxs:  .62rem;
-  --fs-metric: 1.1rem;
-  --fs-tab:    .82rem;
+/* ═══════════════════════════
+   INPUTS — Terminal fields
+   ═══════════════════════════ */
+.stTextInput > div > div,
+.stTextInput input,
+.stNumberInput input {
+  background: var(--c-surface-2) !important;
+  color: var(--c-text-1) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r4) !important;
+  font-family: var(--ff-ui) !important;
+  font-size: var(--fs-13) !important;
+  text-align: right !important;
+  direction: rtl !important;
+  height: 32px !important;
+  padding: 0 var(--s3) !important;
 }
-/* טאבלט */
-@media (max-width:1024px) {
-  :root {
-    --fs-xl:   1.5rem;
-    --fs-lg:   1.05rem;
-    --fs-md:   .84rem;
-    --fs-sm:   .75rem;
-    --fs-xs:   .65rem;
-    --fs-xxs:  .58rem;
-    --fs-metric: .95rem;
-    --fs-tab:    .76rem;
-  }
-  .block-container { padding:.4rem .6rem!important; }
-  section[data-testid="stSidebar"] { min-width:220px!important; }
+.stTextInput input:focus,
+.stNumberInput input:focus {
+  border-color: var(--c-blue) !important;
+  box-shadow: 0 0 0 1px rgba(31,111,235,0.3) !important;
 }
-/* פלאפון */
-@media (max-width:768px) {
-  :root {
-    --fs-xl:   1.25rem;
-    --fs-lg:   .95rem;
-    --fs-md:   .82rem;
-    --fs-sm:   .72rem;
-    --fs-xs:   .64rem;
-    --fs-xxs:  .56rem;
-    --fs-metric: .88rem;
-    --fs-tab:    .7rem;
-  }
-  .block-container { padding:.3rem .4rem!important; }
-  [data-testid="stMetricValue"] { font-size:.88rem!important; }
-  .stTabs [data-baseweb="tab"] { font-size:.7rem!important; padding:4px 8px!important; }
+input::placeholder { color: var(--c-text-3) !important; font-size: var(--fs-12) !important; }
+
+/* ═══════════════════════════
+   METRICS — KPI Cards
+   ═══════════════════════════ */
+.stMetric {
+  background: var(--c-surface-2) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r6) !important;
+  padding: var(--s3) var(--s4) !important;
 }
-/* מסך גדול */
-@media (min-width:1400px) {
-  :root {
-    --fs-xl:   2.2rem;
-    --fs-lg:   1.35rem;
-    --fs-md:   .92rem;
-    --fs-sm:   .82rem;
-    --fs-xs:   .72rem;
-    --fs-metric: 1.2rem;
-  }
+[data-testid="stMetricValue"] {
+  font-family: var(--ff-mono) !important;
+  font-weight: 600 !important;
+  font-size: var(--fs-20) !important;
+  color: var(--c-text-1) !important;
+  letter-spacing: -0.02em;
+}
+[data-testid="stMetricLabel"] {
+  color: var(--c-text-2) !important;
+  font-size: var(--fs-10) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600 !important;
+}
+[data-testid="stMetricDelta"] { font-size: var(--fs-12) !important; }
+
+/* ═══════════════════════════
+   CHECKBOXES — Compact indicator toggles
+   ═══════════════════════════ */
+.stCheckbox label span, .stCheckbox label p {
+  color: var(--c-text-2) !important;
+  font-size: var(--fs-12) !important;
+  font-weight: 500 !important;
+  font-family: var(--ff-mono) !important;
+}
+.stCheckbox label:hover span { color: var(--c-text-1) !important; }
+.stCheckbox input:checked + div { background: var(--c-blue) !important; }
+
+/* ═══════════════════════════
+   SELECT
+   ═══════════════════════════ */
+.stSelectbox > div > div {
+  background: var(--c-surface-2) !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r4) !important;
+  color: var(--c-text-1) !important;
+  font-size: var(--fs-13) !important;
+  min-height: 32px !important;
 }
 
-[data-testid="stMetricValue"] { font-size:var(--fs-metric)!important; }
-[data-testid="stMetricLabel"] { font-size:var(--fs-xxs)!important; }
-.stTabs [data-baseweb="tab"] { font-size:var(--fs-tab)!important; }
+/* ═══════════════════════════
+   STATUS MESSAGES
+   ═══════════════════════════ */
+.stSuccess { background: var(--c-green-dim) !important; border: 1px solid rgba(63,185,80,.25) !important; border-radius: var(--r4) !important; }
+.stError   { background: var(--c-red-dim)   !important; border: 1px solid rgba(248,81,73,.25) !important; border-radius: var(--r4) !important; }
+.stInfo    { background: var(--c-blue-dim)  !important; border: 1px solid rgba(31,111,235,.25)!important; border-radius: var(--r4) !important; }
+.stWarning { background: var(--c-amber-dim) !important; border: 1px solid rgba(210,153,34,.25)!important; border-radius: var(--r4) !important; }
+
+/* ═══════════════════════════
+   DATA TABLES
+   ═══════════════════════════ */
+[data-testid="stDataFrame"] th {
+  background: var(--c-surface-2) !important;
+  color: var(--c-text-2) !important;
+  font-size: var(--fs-10) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600 !important;
+  padding: 4px 8px !important;
+  border-bottom: 1px solid var(--c-border-md) !important;
+}
+[data-testid="stDataFrame"] td {
+  background: var(--c-surface-1) !important;
+  border-color: var(--c-border) !important;
+  font-family: var(--ff-mono) !important;
+  color: var(--c-text-1) !important;
+  font-size: var(--fs-12) !important;
+  padding: 4px 8px !important;
+}
+
+/* ═══════════════════════════
+   CHARTS — Plotly
+   ═══════════════════════════ */
+.js-plotly-plot .plotly .hoverlayer { direction: ltr !important; }
+.js-plotly-plot .plotly .hoverlayer .hovertext { direction: ltr !important; text-align: left !important; }
+
+/* ═══════════════════════════
+   EXPANDER
+   ═══════════════════════════ */
+.stExpander {
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--r6) !important;
+  background: var(--c-surface-2) !important;
+}
+.stExpander summary { color: var(--c-text-1) !important; font-size: var(--fs-13) !important; font-weight: 600 !important; }
+
+/* ═══════════════════════════
+   SLIDER
+   ═══════════════════════════ */
+.stSlider [data-baseweb="slider"] div[role="slider"] { background: var(--c-blue) !important; }
+.stSlider [data-baseweb="slider"] div[role="progressbar"] { background: var(--c-blue) !important; }
+
+/* ═══════════════════════════
+   TERMINAL UTILITY CLASSES
+   Use in HTML strings
+   ═══════════════════════════ */
+
+/* Toolbar group — wraps related controls */
+.t-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r4);
+}
+.t-bar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--c-border-md);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Section header — tight terminal label */
+.t-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0 4px;
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: 8px;
+}
+.t-head-label {
+  font-size: var(--fs-10);
+  font-weight: 600;
+  color: var(--c-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-family: var(--ff-ui);
+}
+.t-head-action {
+  font-size: var(--fs-11);
+  color: var(--c-blue-lt);
+  cursor: pointer;
+  font-family: var(--ff-ui);
+}
+
+/* Data table */
+.t-table { width: 100%; border-collapse: collapse; direction: rtl; }
+.t-table th {
+  background: var(--c-surface-1);
+  color: var(--c-text-3);
+  font-size: var(--fs-10);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  padding: 5px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--c-border-md);
+  font-family: var(--ff-ui);
+}
+.t-table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--c-border);
+  font-size: var(--fs-13);
+  vertical-align: middle;
+}
+.t-table tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+.t-table tr:hover td { background: rgba(255,255,255,0.04); }
+.t-sym   { font-weight: 600; color: #5BB0FF; font-size: var(--fs-13); font-family: var(--ff-mono); }
+.t-name  { color: var(--c-text-2); font-size: var(--fs-12); }
+.t-price { font-family: var(--ff-mono); color: var(--c-text-1); font-weight: 500; direction: ltr; display: inline-block; }
+.t-pos   { font-family: var(--ff-mono); color: var(--c-green); direction: ltr; display: inline-block; font-weight: 500; }
+.t-neg   { font-family: var(--ff-mono); color: var(--c-red);   direction: ltr; display: inline-block; font-weight: 500; }
+.t-muted { color: var(--c-text-2); font-size: var(--fs-12); }
+
+/* KPI mini card */
+.t-kpi {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r6);
+  padding: 8px 12px;
+  text-align: center;
+}
+.t-kpi-label {
+  font-size: var(--fs-10);
+  color: var(--c-text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 3px;
+  font-family: var(--ff-ui);
+}
+.t-kpi-val {
+  font-family: var(--ff-mono);
+  font-size: var(--fs-16);
+  font-weight: 600;
+  color: var(--c-text-1);
+  letter-spacing: -0.02em;
+}
+
+/* Badge */
+.t-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: var(--fs-11);
+  font-weight: 600;
+  font-family: var(--ff-mono);
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+.t-badge-green { background: var(--c-green-dim); color: var(--c-green); border-color: rgba(63,185,80,.3); }
+.t-badge-red   { background: var(--c-red-dim);   color: var(--c-red);   border-color: rgba(248,81,73,.3); }
+.t-badge-blue  { background: var(--c-blue-dim);  color: #5BB0FF;        border-color: rgba(56,139,253,.3); }
+.t-badge-amber { background: var(--c-amber-dim); color: var(--c-amber); border-color: rgba(210,153,34,.3); }
+.t-badge-pulse { animation: badge-pulse 2s ease infinite; }
+@keyframes badge-pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+/* Card */
+.t-card {
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r6);
+  overflow: hidden;
+}
+.t-card-head {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.t-card-body { padding: 10px 12px; }
+
+/* Accent left border — status indicator */
+.t-accent-green { border-right: 2px solid var(--c-green); }
+.t-accent-red   { border-right: 2px solid var(--c-red);   }
+.t-accent-blue  { border-right: 2px solid var(--c-blue);  }
+.t-accent-amber { border-right: 2px solid var(--c-amber); }
+
+/* Score bar */
+.t-bar-track {
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+/* Ticker pill — recent stocks */
+.t-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--c-surface-3);
+  border: 1px solid var(--c-border);
+  font-family: var(--ff-mono);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--c-text-2);
+  cursor: pointer;
+  transition: all 0.08s;
+  white-space: nowrap;
+}
+.t-chip:hover { border-color: var(--c-blue); color: var(--c-text-1); }
+.t-chip-active { background: var(--c-blue-dim); border-color: rgba(31,111,235,0.5); color: #5BB0FF; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  :root {
+    --fs-14: 0.82rem; --fs-13: 0.77rem; --fs-12: 0.72rem;
+    --fs-20: 1.1rem;  --fs-28: 1.5rem;
+  }
+  .block-container { padding: 6px 8px !important; }
+  .stTabs [data-baseweb="tab"] { font-size: 0.68rem !important; padding: 3px 7px !important; }
+}
+@media (min-width: 1400px) {
+  :root { --fs-36: 2.6rem; --fs-28: 1.9rem; }
+}
 </style>
 """, unsafe_allow_html=True)
+
 
 # ── Constants ──
 DEV_MODE        = True   # ← שני ל-False כשהאפליקציה מוכנה לייצור
@@ -1758,86 +2034,55 @@ thome, t1, t2, t3, t4, t9, t10, t11, t12, t13, t7 = st.tabs([
 with thome:
     from datetime import datetime as _dt
 
-    # ══════════════════════════════════════════════════════
-    # HOME STATE
-    # ══════════════════════════════════════════════════════
-    if 'home_main_cat' not in st.session_state:
+    if "home_main_cat" not in st.session_state:
         st.session_state.home_main_cat = "מניות"
-    if 'home_sub_cat' not in st.session_state:
+    if "home_sub_cat" not in st.session_state:
         st.session_state.home_sub_cat  = "🔥 מומלצות AI"
 
     HOME_SUBS = {
-        "מניות":           ["🔥 מומלצות AI", "🤖 AI", "📱 Tech", "🏦 Finance", "🇺🇸 מניות בולטות"],
-        "שווקים גלובליים": ["📈 מדדים", "$ מט\"ח", "🛢 סחורות", "₿ קריפטו"],
-        "שוק ישראלי":      ["🔥 חמות", 'ת"א 125', 'ת"א 35', "בנקים", "טכנולוגיה", "נדל\"ן", "ביומד", "נפט וגז"],
-        "האישי שלי":       ["תיק", "Watchlist", "התראות"],
+        "מניות":           ["🔥 מומלצות AI","🤖 AI","📱 Tech","🏦 Finance","🇺🇸 מניות בולטות"],
+        "שווקים גלובליים": ["📈 מדדים","$ מט\"ח","🛢 סחורות","₿ קריפטו"],
+        "שוק ישראלי":      ["🔥 חמות",'ת"א 125','ת"א 35',"בנקים","טכנולוגיה","נדל\"ן","ביומד","נפט וגז"],
+        "האישי שלי":       ["תיק","Watchlist","התראות"],
     }
 
-    # ── CSS additions for home ──
-    st.markdown("""
-<style>
-.home-main-cat {
-    display:inline-flex; gap:4px; background:#0d1117;
-    padding:4px; border-radius:10px; margin-bottom:8px;
-}
-.home-sub-row {
-    display:flex; gap:4px; overflow-x:auto; padding:2px 0 6px;
-    scrollbar-width:none; -ms-overflow-style:none;
-}
-.home-sub-row::-webkit-scrollbar { display:none; }
-.rtl-section { direction:rtl; text-align:right; }
-</style>
-""", unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # 1. TOP HEADER
-    # ══════════════════════════════════════════════════════
-
-    # Quick market status
+    # ── Data loaders ──
     @st.cache_data(ttl=120)
-    @st.cache_data(ttl=120)
-    def load_market_group(syms_tuple: tuple) -> dict:
+    def load_market_group(syms_tuple):
         result = {}
         for name, sym in syms_tuple:
             try:
                 h = yf.Ticker(sym).history(period="2d")
                 if len(h) >= 2:
-                    cur  = float(h['Close'].iloc[-1])
-                    prev = float(h['Close'].iloc[-2])
-                    result[name] = {"price": cur, "chg": (cur - prev) / prev * 100}
+                    cur = float(h["Close"].iloc[-1]); prev = float(h["Close"].iloc[-2])
+                    result[name] = {"price": cur, "chg": (cur-prev)/prev*100}
             except: pass
         return result
 
     @st.cache_data(ttl=180)
     def load_market_movers():
-        us_syms = ["NVDA","AMD","TSLA","AAPL","MSFT","META","GOOGL","AMZN",
-                   "NFLX","CRM","PLTR","SOFI","RIVN","COIN","BABA","NIO","LCID"]
+        us_syms = ["NVDA","AMD","TSLA","AAPL","MSFT","META","GOOGL","AMZN","NFLX","CRM","PLTR","COIN"]
         rows = []
         for s in us_syms:
             try:
                 h = yf.Ticker(s).history(period="2d")
                 if len(h) >= 2:
-                    c = float(h['Close'].iloc[-1])
-                    p = float(h['Close'].iloc[-2])
-                    v = float(h['Volume'].iloc[-1])
-                    rows.append({"sym":s,"price":c,"chg":(c-p)/p*100,"vol":v})
+                    c2 = float(h["Close"].iloc[-1]); p2 = float(h["Close"].iloc[-2])
+                    rows.append({"sym":s,"price":c2,"chg":(c2-p2)/p2*100,"vol":float(h["Volume"].iloc[-1]),"mkt":"—"})
             except: pass
-        if not rows:
-            return {"gainers":[],"losers":[],"active":[]}
-        return {
-            "gainers": sorted(rows, key=lambda x: x["chg"], reverse=True)[:5],
-            "losers":  sorted(rows, key=lambda x: x["chg"])[:5],
-            "active":  sorted(rows, key=lambda x: x["vol"], reverse=True)[:5],
-        }
+        if not rows: return {"gainers":[],"losers":[],"active":[]}
+        return {"gainers":sorted(rows,key=lambda x:x["chg"],reverse=True)[:6],
+                "losers":sorted(rows,key=lambda x:x["chg"])[:6],
+                "active":sorted(rows,key=lambda x:x["vol"],reverse=True)[:6]}
 
     @st.cache_data(ttl=180)
     def load_ta_market():
         ta_groups = {
-            'ת"א 35':   ["FIBI.TA","LUMI.TA","DSCT.TA","ESLT.TA","TEVA.TA","NICE.TA","CHKP.TA","ICL.TA"],
-            'ת"א 125':  ["RSEL.TA","AURA.TA","SANO.TA","ENLT.TA","MGDL.TA"],
+            'ת"א 35':   ["FIBI.TA","LUMI.TA","DSCT.TA","ESLT.TA","TEVA.TA","NICE.TA","CHKP.TA"],
+            'ת"א 125':  ["RSEL.TA","AURA.TA","SANO.TA","ENLT.TA"],
             "בנקים":    ["FIBI.TA","LUMI.TA","DSCT.TA","HAPO.TA","MIZR.TA"],
             "טכנולוגיה":["NICE.TA","CHKP.TA","ESLT.TA"],
-            'נדל"ן':    ["AZRG.TA","EMCO.TA","AFRE.TA","AMOT.TA"],
+            'נדל"ן':    ["AZRG.TA","EMCO.TA","AFRE.TA"],
             "ביומד":    ["TEVA.TA","KMDA.TA","SPNS.TA"],
             "נפט וגז":  ["DLEKG.TA","NFTA.TA"],
         }
@@ -1848,530 +2093,373 @@ with thome:
                 try:
                     h = yf.Ticker(s).history(period="2d")
                     if len(h) >= 2:
-                        c = float(h['Close'].iloc[-1])
-                        p = float(h['Close'].iloc[-2])
-                        v = float(h['Volume'].iloc[-1])
+                        c2 = float(h["Close"].iloc[-1]); p2 = float(h["Close"].iloc[-2])
                         inf_ta = load_info(s)
-                        name_ta = (inf_ta.get("shortName","") or s.replace(".TA",""))[:16]
-                        rows_ta.append({
-                            "sym": s.replace(".TA",""), "name": name_ta,
-                            "price": c, "chg": (c-p)/p*100, "vol": v
-                        })
+                        rows_ta.append({"sym":s.replace(".TA",""),"name":(inf_ta.get("shortName","") or s.replace(".TA",""))[:16],
+                                        "price":c2,"chg":(c2-p2)/p2*100,"vol":float(h["Volume"].iloc[-1]),"mkt":"—"})
                 except: pass
             result[grp] = sorted(rows_ta, key=lambda x: x["chg"], reverse=True)
         return result
 
-    def home_market_status():
-        checks = {"S&P 500":"^GSPC","ת\"א 125":"^TA125.TA","USD/ILS":"ILS=X"}
-        out = []
-        for name, sym in checks.items():
-            try:
-                h = yf.Ticker(sym).history(period="2d")
-                if len(h) >= 2:
-                    c = float(h['Close'].iloc[-1]); p = float(h['Close'].iloc[-2])
-                    chg = (c-p)/p*100
-                    clr = "#3fb950" if chg >= 0 else "#f85149"
-                    arr = chr(9650) if chg >= 0 else chr(9660)
-                    if "ILS" in sym:
-                        out.append(f'<span style="color:#8b949e;">USD/ILS </span><span style="color:#e6edf3;font-family:JetBrains Mono,monospace;">{c:.3f}</span>')
-                    else:
-                        out.append(f'<span style="color:#8b949e;">{name} </span><span style="color:{clr};font-family:JetBrains Mono,monospace;">{arr}{abs(chg):.2f}%</span>')
-            except: pass
-        now = _dt.now()
-        mkt_open = 9 <= now.hour < 22
-        status = f'<span style="color:{"#3fb950" if mkt_open else "#f85149"};font-size:.65rem;">{"● שוק פתוח" if mkt_open else "● שוק סגור"}</span>'
-        return out, status
+    with st.spinner(""):
+        _movers = load_market_movers()
+        _ta_mkt = load_ta_market()
+        _hot    = load_hot_stocks()
 
-    mkt_pills, mkt_status = home_market_status()
+    _mkt_ticker_data = load_market_group(tuple([
+        ("S&P 500","^GSPC"),("NASDAQ","^IXIC"),("BTC/USD","BTC-USD"),("USD/ILS","ILS=X")
+    ]))
 
-    # Header — branding + market status only (search is in main header)
+    # ── Market ticker bar ──
+    _now = _dt.now()
+    _mkt_open = 9 <= _now.hour < 22
+    _status_dot_c = "#3FB950" if _mkt_open else "#8B949E"
+    _status_txt   = "שוק פתוח" if _mkt_open else "שוק סגור"
+    _ticker_html  = ""
+    for _tname, _tsym in [("S&P 500","^GSPC"),("NASDAQ","^IXIC"),("BTC/USD","BTC-USD"),("USD/ILS","ILS=X")]:
+        _d2 = _mkt_ticker_data.get(_tname,{})
+        if _d2:
+            _p2 = _d2["price"]; _c2 = _d2["chg"]
+            _clr2 = "#3FB950" if _c2>=0 else "#F85149"
+            _arr2 = chr(9650) if _c2>=0 else chr(9660)
+            _pstr2 = f"{_p2:,.3f}" if "ILS" in _tsym else (f"{_p2:,.0f}" if _p2>1000 else f"{_p2:,.2f}")
+            _ticker_html += (
+                f'<div style="display:flex;align-items:center;gap:8px;padding:0 14px;'
+                f'border-right:1px solid rgba(255,255,255,0.07);">'
+                f'<span style="font-size:11px;font-weight:700;color:#E8ECF1;font-family:JetBrains Mono,monospace;">{_pstr2}</span>'
+                f'<span style="font-size:11px;color:#8B949E;">{_tname}</span>'
+                f'<span style="font-size:11px;color:{_clr2};font-weight:600;">{_c2:+.2f}% {_arr2}</span>'
+                f'</div>'
+            )
+
     st.markdown(
-        f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0 4px;">'
-        f'<div style="width:30px;height:30px;background:linear-gradient(135deg,#1f6feb,#388bfd);'
-        f'border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.9rem;">📈</div>'
-        f'<div>'
-        f'<div style="font-size:1rem;font-weight:800;color:#e6edf3;letter-spacing:-.3px;">Alpha Charts Pro</div>'
-        f'<div style="display:flex;gap:10px;align-items:center;margin-top:2px;">'
-        + "  ·  ".join(mkt_pills) + f'  {mkt_status}'
-        + f'</div></div></div>',
+        f'<div style="background:#0A0D13;border-bottom:1px solid rgba(255,255,255,0.07);'
+        f'display:flex;align-items:center;justify-content:flex-end;padding:0 6px;'
+        f'height:34px;direction:rtl;overflow:hidden;gap:0;margin-bottom:8px;">'
+        f'<div style="display:flex;align-items:center;gap:5px;padding:0 14px;'
+        f'border-right:1px solid rgba(255,255,255,0.07);">'
+        f'<span style="width:6px;height:6px;border-radius:50%;background:{_status_dot_c};display:inline-block;"></span>'
+        f'<span style="font-size:11px;font-weight:600;color:{_status_dot_c};">{_status_txt}</span>'
+        f'</div>{_ticker_html}</div>',
         unsafe_allow_html=True
     )
 
-    # Recent quick-access
-    if st.session_state.get("recent"):
-        rec_html = ""
-        for s in st.session_state.recent[:8]:
-            is_cur = s == st.session_state.ticker
-            bg = "#1f6feb" if is_cur else "#21262d"
-            clr = "#fff" if is_cur else "#c9d1d9"
-            rec_html += (
-                f'<span onclick="" style="background:{bg};color:{clr};border:1px solid #30363d;'
-                f'border-radius:6px;padding:3px 9px;font-size:.7rem;font-weight:600;'
-                f'cursor:pointer;white-space:nowrap;">{s}</span>'
-            )
-        st.markdown(f'<div style="display:flex;gap:5px;flex-wrap:wrap;margin:4px 0 2px;">{rec_html}</div>',
-                    unsafe_allow_html=True)
-        rec_cols = st.columns(len(st.session_state.recent[:8]))
-        for i, s in enumerate(st.session_state.recent[:8]):
-            if rec_cols[i].button(s, key=f"home_rec_{i}",
-                                   type="primary" if s==st.session_state.ticker else "secondary"):
-                st.session_state.ticker = s
-                st.session_state.ai_res = None
-                st.rerun()
-
-    st.markdown('<div style="height:4px;border-bottom:1px solid #21262d;margin-bottom:10px;"></div>',
-                unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # 2. MAIN CATEGORY ROW — Level 1
-    # ══════════════════════════════════════════════════════
-    MAIN_CATS = list(HOME_SUBS.keys())
-    mc_cols = st.columns(len(MAIN_CATS))
-    for i, cat in enumerate(MAIN_CATS):
-        is_active = cat == st.session_state.home_main_cat
-        if mc_cols[i].button(
-            cat, key=f"mc_{i}",
-            type="primary" if is_active else "secondary",
-            use_container_width=True
-        ):
-            st.session_state.home_main_cat = cat
-            st.session_state.home_sub_cat  = HOME_SUBS[cat][0]
+    # ── L1 Category buttons ──
+    _main_cats = list(HOME_SUBS.keys())
+    _mc_cols = st.columns(len(_main_cats))
+    for _i, _mc in enumerate(_main_cats):
+        if _mc_cols[_i].button(_mc, key=f"hmc_{_i}",
+                                type="primary" if _mc==st.session_state.home_main_cat else "secondary",
+                                use_container_width=True):
+            st.session_state.home_main_cat = _mc
+            st.session_state.home_sub_cat  = HOME_SUBS[_mc][0]
             st.rerun()
 
-    # ══════════════════════════════════════════════════════
-    # 3. SUBCATEGORY ROW — Level 2
-    # ══════════════════════════════════════════════════════
-    subs = HOME_SUBS[st.session_state.home_main_cat]
-    # Ensure sub_cat is valid for current main cat
-    if st.session_state.home_sub_cat not in subs:
-        st.session_state.home_sub_cat = subs[0]
+    # ── L2 Sub-category ──
+    _subs = HOME_SUBS[st.session_state.home_main_cat]
+    if st.session_state.home_sub_cat not in _subs:
+        st.session_state.home_sub_cat = _subs[0]
 
-    sc_cols = st.columns(len(subs))
-    for i, sub in enumerate(subs):
-        is_active = sub == st.session_state.home_sub_cat
-        if sc_cols[i].button(
-            sub, key=f"sc_{i}_{st.session_state.home_main_cat}",
-            type="primary" if is_active else "secondary",
-            use_container_width=True
-        ):
-            st.session_state.home_sub_cat = sub
+    _sc_cols = st.columns(len(_subs))
+    for _i2, _sc in enumerate(_subs):
+        if _sc_cols[_i2].button(_sc, key=f"hsc_{_i2}_{st.session_state.home_main_cat}",
+                                 type="primary" if _sc==st.session_state.home_sub_cat else "secondary",
+                                 use_container_width=True):
+            st.session_state.home_sub_cat = _sc
             st.rerun()
 
-    st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="height:4px;border-top:1px solid rgba(255,255,255,0.05);margin:4px 0 8px;"></div>', unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════
-    # 4. ACTIVE CONTENT PANEL — One panel only
-    # ══════════════════════════════════════════════════════
-    main_cat = st.session_state.home_main_cat
-    sub_cat  = st.session_state.home_sub_cat
+    # ── Terminal stock table ──
+    def _fmt_vol(v):
+        if not v: return "—"
+        if v>=1e9: return f"{v/1e9:.1f}B"
+        if v>=1e6: return f"{v/1e6:.1f}M"
+        return f"{v/1e3:.0f}K"
 
-    def render_stock_table(title, subtitle, items, show_btn=True):
-        """
-        items = list of dicts: {sym, name, price, chg, note}
-        show_btn: True = כפתור ▶ בכל שורה (מניות, ישראלי)
-                  False = ללא כפתור (שווקים גלובליים)
-        """
-        th = ('style="padding:7px 12px;color:#8b949e;font-size:.62rem;text-transform:uppercase;'
-              'border-bottom:2px solid #30363d;background:#0d1117;text-align:right;"')
+    def _fmt_mkt(v):
+        try:
+            v = float(v) if v else 0
+            if v>=1e12: return f"${v/1e12:.1f}T"
+            if v>=1e9:  return f"${v/1e9:.0f}B"
+        except: pass
+        return "—"
 
-        cols_def = ["סימול","שם","מחיר","שינוי","הערה"]
-        header_html = "<tr>" + "".join(f"<th {th}>{c}</th>" for c in cols_def) + "</tr>"
-
-        rows_html = ""
-        for i, item in enumerate(items):
-            sym   = item.get("sym","")
-            name  = item.get("name","")
-            price = item.get("price","—")
-            chg   = item.get("chg", 0)
-            note  = item.get("note","")
-            clr   = "#3fb950" if chg >= 0 else "#f85149"
-            arr   = chr(9650) if chg >= 0 else chr(9660)
-            bg    = "#161b22" if i % 2 == 0 else "#0d1117"
-            td    = f'style="padding:8px 12px;border-bottom:1px solid #1c2128;text-align:right;background:{bg};"'
-
-            rows_html += (
-                f'<tr>'
-                f'<td {td}><span style="font-weight:700;color:#388bfd;font-size:.82rem;">{sym}</span></td>'
-                f'<td {td}><span style="color:#8b949e;font-size:.75rem;">{name}</span></td>'
-                f'<td {td}><span style="font-family:JetBrains Mono,monospace;font-size:.8rem;color:#e6edf3;font-weight:600;">{price}</span></td>'
-                f'<td {td}><span style="font-family:JetBrains Mono,monospace;font-size:.78rem;color:{clr};font-weight:600;">{arr}{abs(chg):.2f}%</span></td>'
-                f'<td {td}><span style="color:#8b949e;font-size:.7rem;">{note}</span></td>'
+    def terminal_table(items, btn_key="t", show_btns=True):
+        th = 'style="padding:5px 10px;font-size:10px;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid rgba(255,255,255,0.08);text-align:right;background:#080B0F;white-space:nowrap;"'
+        rows_html2 = ""
+        for i3, item in enumerate(items):
+            _s2  = item.get("sym",""); _n2  = item.get("name","")
+            _p3  = item.get("price",0); _c3  = item.get("chg",0)
+            _v3  = item.get("vol",0);   _m3  = item.get("mkt","—")
+            _clr3= "#3FB950" if _c3>=0 else "#F85149"
+            _arr3= chr(9650) if _c3>=0 else chr(9660)
+            _bg3 = "rgba(255,255,255,0.02)" if i3%2==0 else "transparent"
+            _ps3 = f"${_p3:,.2f}" if _p3<10000 else f"${_p3:,.0f}"
+            rows_html2 += (
+                f'<tr style="background:{_bg3};">'
+                f'<td style="padding:9px 10px;font-family:JetBrains Mono,monospace;font-weight:700;color:#5BB0FF;font-size:13px;">{_s2}</td>'
+                f'<td style="padding:9px 10px;color:rgba(255,255,255,0.45);font-size:12px;">{_n2[:22]}</td>'
+                f'<td style="padding:9px 10px;font-family:JetBrains Mono,monospace;color:#E8ECF1;font-weight:600;font-size:13px;direction:ltr;text-align:left;">{_ps3}</td>'
+                f'<td style="padding:9px 10px;font-family:JetBrains Mono,monospace;color:{_clr3};font-weight:600;font-size:13px;direction:ltr;text-align:left;">{_c3:+.2f}% {_arr3}</td>'
+                f'<td style="padding:9px 10px;font-family:JetBrains Mono,monospace;color:rgba(255,255,255,0.35);font-size:12px;direction:ltr;text-align:left;">{_fmt_vol(_v3)}</td>'
+                f'<td style="padding:9px 10px;font-family:JetBrains Mono,monospace;color:rgba(255,255,255,0.35);font-size:12px;direction:ltr;text-align:left;">{_m3}</td>'
                 f'</tr>'
             )
-
         st.markdown(
-            f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;overflow:hidden;">'
-            f'<div style="padding:12px 14px 8px;border-bottom:1px solid #21262d;">'
-            f'<div style="font-size:.88rem;font-weight:700;color:#e6edf3;">{title}</div>'
-            + (f'<div style="color:#8b949e;font-size:.68rem;margin-top:2px;">{subtitle}</div>' if subtitle else '')
-            + f'</div>'
-            f'<div style="overflow-x:auto;">'
-            f'<table style="width:100%;border-collapse:collapse;direction:rtl;">'
-            f'<thead>{header_html}</thead>'
-            f'<tbody>{rows_html}</tbody>'
-            f'</table></div></div>',
+            f'<div style="background:#0D1117;border:1px solid rgba(255,255,255,0.08);border-radius:6px;overflow:hidden;">'
+            f'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;direction:rtl;">'
+            f'<thead><tr><th {th}>סימול</th><th {th}>שם חברה</th><th {th}>מחיר</th>'
+            f'<th {th}>שינוי %</th><th {th}>נפח</th><th {th}>שווי שוק</th></tr></thead>'
+            f'<tbody>{rows_html2}</tbody></table></div></div>',
             unsafe_allow_html=True
         )
-
-        # כפתורי פתיחה — רק אם show_btn=True
-        if show_btn and items:
+        if show_btns and items:
             st.markdown('<div style="height:4px;"></div>', unsafe_allow_html=True)
-            btn_cols = st.columns(min(len(items), 8))
-            for i, item in enumerate(items[:8]):
-                sym = item.get("sym","")
-                if not sym or sym == "—": continue
-                is_cur = sym == st.session_state.ticker
-                if btn_cols[i].button(sym, key=f"tbl_btn_{sym}_{i}",
-                                       type="primary" if is_cur else "secondary",
-                                       use_container_width=True):
-                    st.session_state.ticker = sym
-                    st.session_state.ai_res = None
-                    if sym not in st.session_state.recent:
-                        st.session_state.recent.insert(0, sym)
+            _bsyms = [it["sym"] for it in items[:8]]
+            _bcols = st.columns(min(len(_bsyms),8))
+            for _bi2, _bsym2 in enumerate(_bsyms):
+                _is_cur2 = _bsym2==st.session_state.ticker or _bsym2+".TA"==st.session_state.ticker
+                if _bcols[_bi2].button(_bsym2, key=f"{btn_key}_{_bi2}_{_bsym2}",
+                                        type="primary" if _is_cur2 else "secondary",
+                                        use_container_width=True):
+                    st.session_state.ticker  = _bsym2
+                    st.session_state.ai_res  = None
+                    if _bsym2 not in st.session_state.recent:
+                        st.session_state.recent.insert(0,_bsym2)
                         st.session_state.recent = st.session_state.recent[:8]
-                    save_user_data()
-                    st.rerun()
+                    save_user_data(); st.rerun()
 
+    # ── Content by category ──
+    _mc2 = st.session_state.home_main_cat
+    _sc2 = st.session_state.home_sub_cat
 
-    def price_row(sym, name, price, chg, note="", flag=""):
-        """Legacy — kept for RTL Israeli table only"""
-        clr = "#3fb950" if chg >= 0 else "#f85149"
-        arr = chr(9650) if chg >= 0 else chr(9660)
-        return (
-            f'<tr>'
-            f'<td style="padding:9px 12px;font-weight:700;color:#388bfd;'
-            f'font-size:.82rem;border-bottom:1px solid #1c2128;white-space:nowrap;">'
-            f'{flag} {sym}</td>'
-            f'<td style="padding:9px 12px;color:#8b949e;font-size:.75rem;'
-            f'border-bottom:1px solid #1c2128;max-width:140px;overflow:hidden;'
-            f'text-overflow:ellipsis;white-space:nowrap;">{name}</td>'
-            f'<td style="padding:9px 12px;font-family:JetBrains Mono,monospace;'
-            f'font-size:.8rem;color:#e6edf3;font-weight:600;border-bottom:1px solid #1c2128;'
-            f'white-space:nowrap;">{price}</td>'
-            f'<td style="padding:9px 12px;font-family:JetBrains Mono,monospace;'
-            f'font-size:.78rem;color:{clr};font-weight:600;border-bottom:1px solid #1c2128;'
-            f'white-space:nowrap;">{arr}{abs(chg):.2f}%</td>'
-            f'<td style="padding:9px 12px;color:#8b949e;font-size:.7rem;'
-            f'border-bottom:1px solid #1c2128;">{note}</td>'
-            f'</tr>'
-        )
-
-    def content_panel(title, subtitle, table_rows, cols=("סימול","שם","מחיר","שינוי","הערה"), rtl=False):
-        dir_style = 'direction:rtl;text-align:right;' if rtl else ''
-        th = f'style="padding:7px 12px;color:#8b949e;font-size:.64rem;text-transform:uppercase;' \
-             f'border-bottom:2px solid #30363d;background:#0d1117;"'
-        header = "<tr>" + "".join(f"<th {th}>{c}</th>" for c in cols) + "</tr>"
-        return (
-            f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
-            f'overflow:hidden;{dir_style}">'
-            f'<div style="padding:14px 16px 10px;border-bottom:1px solid #21262d;">'
-            f'<div style="font-size:.9rem;font-weight:700;color:#e6edf3;">{title}</div>'
-            + (f'<div style="color:#8b949e;font-size:.7rem;margin-top:2px;">{subtitle}</div>' if subtitle else '')
-            + f'</div>'
-            f'<div style="overflow-x:auto;">'
-            f'<table style="width:100%;border-collapse:collapse;{dir_style}">'
-            f'<thead>{header}</thead>'
-            f'<tbody>{"".join(table_rows)}</tbody>'
-            f'</table></div></div>'
-        )
-
-    # ── מניות panels ──
-    if main_cat == "מניות":
-
-        if sub_cat == "🔥 מומלצות AI":
-            hot = load_hot_stocks()
-            items_hot = []
-            for s in hot[:5]:
-                p = get_live_price(s["ticker"])
-                pstr = f'${p:.2f}' if p else "—"
-                items_hot.append({
-                    "sym":   s["ticker"],
-                    "name":  s.get("name",""),
-                    "price": pstr,
-                    "chg":   0.5 if s.get("direction")=="bullish" else -0.5,
-                    "note":  s.get("reason",""),
-                })
-            render_stock_table("🔥 מומלצות AI", "5 מניות חמות לפי המלצת AI — מתעדכן כל שעה", items_hot)
-
+    if _mc2 == "מניות":
+        if _sc2 == "🔥 מומלצות AI":
+            _hi = []
+            for _hs in _hot[:6]:
+                _hp2 = get_live_price(_hs["ticker"]); _inf_h2 = load_info(_hs["ticker"])
+                _hi.append({"sym":_hs["ticker"],"name":_hs.get("name",""),
+                             "price":_hp2 or 0,"chg":0.5 if _hs.get("direction")=="bullish" else -0.5,
+                             "vol":_inf_h2.get("averageVolume",0) or 0,
+                             "mkt":_fmt_mkt(_inf_h2.get("marketCap"))})
+            terminal_table(_hi,"hot")
+        elif _sc2 == "🇺🇸 מניות בולטות":
+            terminal_table([{"sym":r["sym"],"name":"","price":r["price"],"chg":r["chg"],"vol":r["vol"],"mkt":"—"}
+                             for r in _movers.get("gainers",[])[:6]],"mv")
         else:
-            # Category stocks
-            cat_map = {
-                "🤖 AI":      CATEGORIES.get("🤖 AI", []),
-                "📱 Tech":    CATEGORIES.get("📱 Tech", []),
-                "🏦 Finance": CATEGORIES.get("🏦 Finance", []),
-            }
-            # מניות בולטות = movers
-            if sub_cat == "🇺🇸 מניות בולטות":
-                with st.spinner(""):
-                    movers_data = load_market_movers()
-                items_mv = [{"sym":r["sym"],"name":"","price":f'${r["price"]:,.2f}',"chg":r["chg"],"note":"עולה ביותר"} for r in movers_data.get("gainers",[])[:5]]
-                render_stock_table("🇺🇸 מניות בולטות", "עולות ביותר היום", items_mv)
-            else:
-                syms_list = cat_map.get(sub_cat, [])
-                items_cat = []
-                for sym_c in syms_list:
-                    sname, sdesc = STOCK_DESCS.get(sym_c, (sym_c, ""))
-                    p = get_live_price(sym_c)
-                    pstr = f'${p:.2f}' if p else "—"
-                    items_cat.append({"sym":sym_c,"name":sname,"price":pstr,"chg":0,"note":sdesc})
-                if items_cat:
-                    render_stock_table(sub_cat, "", items_cat)
+            _cat_map2 = {"🤖 AI":CATEGORIES.get("🤖 AI",[]),"📱 Tech":CATEGORIES.get("📱 Tech",[]),"🏦 Finance":CATEGORIES.get("🏦 Finance",[])}
+            _ci = []
+            for _cs2 in _cat_map2.get(_sc2,[]):
+                _cp3 = get_live_price(_cs2); _inf_c2 = load_info(_cs2)
+                _sn2,_ = STOCK_DESCS.get(_cs2,(_cs2,""))
+                _ci.append({"sym":_cs2,"name":_sn2,"price":_cp3 or 0,"chg":0,
+                             "vol":_inf_c2.get("averageVolume",0) or 0,"mkt":_fmt_mkt(_inf_c2.get("marketCap"))})
+            terminal_table(_ci,f"cat{_sc2}")
 
-    # ── שווקים גלובליים ──
-    elif main_cat == "שווקים גלובליים":
-        GLOBAL_ITEMS = {
-            "📈 מדדים": [("S&P 500","^GSPC"),("נאסד\"ק 100","^NDX"),("Dow Jones","^DJI"),
-                         ("גרמניה 40","^GDAXI"),("בריטניה 100","^FTSE"),("יפן 225","^N225"),("ASX 200","^AXJO"),("VIX","^VIX")],
-            "$ מט\"ח":  [("יורו/דולר","EURUSD=X"),("פאונד/דולר","GBPUSD=X"),("דולר/ין","JPY=X"),
-                          ("דולר/שקל","ILS=X"),("שוויצרי","CHF=X"),("קנדי","CAD=X")],
-            "🛢 סחורות":[("זהב","GC=F"),("נפט","CL=F"),("כסף","SI=F"),("גז טבעי","NG=F"),("נחושת","HG=F")],
-            "₿ קריפטו":[("Bitcoin","BTC-USD"),("Ethereum","ETH-USD"),("Solana","SOL-USD"),("BNB","BNB-USD")],
+    elif _mc2 == "שווקים גלובליים":
+        _GL2 = {
+            "📈 מדדים": [("S&P 500","^GSPC"),("נאסד\"ק","^NDX"),("Dow Jones","^DJI"),("גרמניה 40","^GDAXI"),("יפן 225","^N225")],
+            "$ מט\"ח":  [("יורו/דולר","EURUSD=X"),("פאונד/דולר","GBPUSD=X"),("דולר/ין","JPY=X"),("דולר/שקל","ILS=X")],
+            "🛢 סחורות": [("זהב","GC=F"),("נפט","CL=F"),("כסף","SI=F"),("גז טבעי","NG=F"),("נחושת","HG=F")],
+            "₿ קריפטו":  [("Bitcoin","BTC-USD"),("Ethereum","ETH-USD"),("Solana","SOL-USD")],
         }
-        items = GLOBAL_ITEMS.get(sub_cat, [])
-        with st.spinner(""):
-            grp_data = load_market_group(tuple(items))
-        items_gl = []
-        for name, sym in items:
-            d = grp_data.get(name,{})
-            if d:
-                p = d["price"]
-                pstr = f'{p:,.0f}' if p>1000 else (f'{p:,.3f}' if p<10 else f'{p:,.2f}')
-                items_gl.append({"sym":sym.replace("=X","").replace("^",""),"name":name,"price":pstr,"chg":d["chg"],"note":""})
+        _gl_raw2 = _GL2.get(_sc2,[])
+        _gl_data2 = load_market_group(tuple(_gl_raw2))
+        _gl_items2 = []
+        for _gn2, _gs2 in _gl_raw2:
+            _gd2 = _gl_data2.get(_gn2,{})
+            _gp2 = _gd2.get("price",0)
+            _pstr3 = f"{_gp2:,.0f}" if _gp2>1000 else (f"{_gp2:,.3f}" if _gp2<10 else f"{_gp2:,.2f}")
+            _gl_items2.append({"sym":_gs2.replace("=X","").replace("^",""),"name":_gn2,
+                                "price":_gp2,"chg":_gd2.get("chg",0),"vol":0,"mkt":"—"})
+        terminal_table(_gl_items2,"gl",show_btns=False)
+
+    elif _mc2 == "שוק ישראלי":
+        _ta_key2 = {"🔥 חמות":'ת"א 35','ת"א 125':'ת"א 125','ת"א 35':'ת"א 35',"בנקים":"בנקים","טכנולוגיה":"טכנולוגיה",'נדל"ן':'נדל"ן',"ביומד":"ביומד","נפט וגז":"נפט וגז"}
+        _ta_rows2 = _ta_mkt.get(_ta_key2.get(_sc2,'ת"א 35'),[])
+        terminal_table([{"sym":r["sym"],"name":r["name"],"price":r["price"],"chg":r["chg"],"vol":r["vol"],"mkt":"—"}
+                         for r in _ta_rows2[:7]],"ta")
+
+    else:
+        if _sc2 == "תיק":
+            _pf3 = st.session_state.get("portfolio_positions",[])
+            if not _pf3:
+                st.markdown('<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.2);font-size:12px;">תיק ריק</div>', unsafe_allow_html=True)
             else:
-                items_gl.append({"sym":"—","name":name,"price":"—","chg":0,"note":"טוען..."})
-        render_stock_table(sub_cat, "נתוני שוק בזמן אמת", items_gl, show_btn=False)
+                terminal_table([{"sym":p["symbol"],"name":f'{p["qty"]:.0f} מניות',"price":get_live_price(p["symbol"]) or p["cost"],
+                                  "chg":((get_live_price(p["symbol"]) or p["cost"])-p["cost"])/p["cost"]*100,"vol":0,"mkt":"—"}
+                                 for p in _pf3],"pf")
+        elif _sc2 == "Watchlist":
+            _wl3 = st.session_state.get("watchlist",[])
+            _wl_rows3 = []
+            for _ws3 in _wl3[:8]:
+                _wp3 = get_live_price(_ws3)
+                _wd3 = load_ohlcv(_ws3,"5D","1d")
+                _wc3 = 0
+                if _wp3 and _wd3 is not None and len(_wd3)>=2:
+                    _wc3 = (_wp3-float(_wd3["Close"].iloc[-2]))/float(_wd3["Close"].iloc[-2])*100
+                _wl_rows3.append({"sym":_ws3,"name":"","price":_wp3 or 0,"chg":_wc3,"vol":0,"mkt":"—"})
+            terminal_table(_wl_rows3,"wl") if _wl_rows3 else st.markdown('<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.2);font-size:12px;">Watchlist ריקה</div>', unsafe_allow_html=True)
+        else:
+            _al3 = [{"sym":a["sym"],"name":a["cond"],"price":a["target"],"chg":0,"vol":0,"mkt":"✅" if a.get("triggered") else "⏳"} for a in st.session_state.get("alerts_list",[])[:8]]
+            terminal_table(_al3,"al") if _al3 else st.markdown('<div style="text-align:center;padding:40px;color:rgba(255,255,255,0.2);font-size:12px;">אין התראות</div>', unsafe_allow_html=True)
 
-    # ── שוק ישראלי ── (RTL)
-    elif main_cat == "שוק ישראלי":
-        TA_MAP = {
-            "🔥 חמות":    ["TEVA.TA","NICE.TA","CHKP.TA","ESLT.TA","ICL.TA"],
-            'ת"א 125':    ["FIBI.TA","LUMI.TA","DSCT.TA","TEVA.TA","NICE.TA","CHKP.TA","ESLT.TA","ICL.TA"],
-            'ת"א 35':     ["FIBI.TA","LUMI.TA","DSCT.TA","ESLT.TA","TEVA.TA","NICE.TA","CHKP.TA","ICL.TA"],
-            "בנקים":      ["FIBI.TA","LUMI.TA","DSCT.TA","HAPO.TA","MIZR.TA"],
-            "טכנולוגיה":  ["NICE.TA","CHKP.TA","ESLT.TA"],
-            "נדל\"ן":     ["AZRG.TA","EMCO.TA","AFRE.TA","AMOT.TA"],
-            "ביומד":      ["TEVA.TA","KMDA.TA","SPNS.TA"],
-            "נפט וגז":    ["DLEKG.TA","NFTA.TA"],
-        }
-        ta_syms = TA_MAP.get(sub_cat, [])
+    # ── Bottom row: Volume chart + Sentiment ──
+    st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+    _b1, _b2 = st.columns([3,2])
 
-        with st.spinner(""):
-            ta_rows = []
-            for s in ta_syms:
-                try:
-                    h = yf.Ticker(s).history(period="2d")
-                    if len(h) >= 2:
-                        c = float(h['Close'].iloc[-1]); p2 = float(h['Close'].iloc[-2])
-                        chg = (c-p2)/p2*100
-                        inf_s = load_info(s)
-                        nm = (inf_s.get("shortName","") or s.replace(".TA",""))[:18]
-                        ta_rows.append((s.replace(".TA",""), nm, f'₪{c:,.2f}', chg))
-                except: pass
+    with _b1:
+        try:
+            _df_v = load_ohlcv(ticker,"5D","1h") if ticker else None
+            if _df_v is not None and "Volume" in _df_v.columns and len(_df_v)>0:
+                _vv = _df_v["Volume"].astype(float).tail(14)
+                _mx_v = float(_vv.max()) if len(_vv)>0 else 1
+                _vc = ["#388BFD" if v>=_mx_v*0.7 else "#1F3A5F" for v in _vv]
+                _fig_v = go.Figure(go.Bar(y=_vv.tolist(),marker_color=_vc,marker_line_width=0))
+                _fig_v.update_layout(height=180,paper_bgcolor="#0D1117",plot_bgcolor="#0D1117",
+                    margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
+                    title=dict(text=f"נפח מסחר לפי שעה",font=dict(size=11,color="rgba(255,255,255,0.3)"),x=1,xanchor="right"),
+                    xaxis=dict(showgrid=False,showticklabels=False,zeroline=False),
+                    yaxis=dict(showgrid=True,gridcolor="rgba(255,255,255,0.04)",showticklabels=False,zeroline=False))
+                st.plotly_chart(_fig_v,use_container_width=True)
+        except: pass
 
-        # RTL table — columns: מניה | שם | מחיר | שינוי
-        th_rtl = 'style="padding:7px 12px;color:#8b949e;font-size:.64rem;text-transform:uppercase;border-bottom:2px solid #30363d;background:#0d1117;text-align:right;"'
-        rows_html = ""
-        for i, (sym_ta, nm_ta, price_ta, chg_ta) in enumerate(ta_rows):
-            clr = "#3fb950" if chg_ta >= 0 else "#f85149"
-            arr = chr(9650) if chg_ta >= 0 else chr(9660)
-            bg  = "#161b22" if i%2==0 else "#0d1117"
-            rows_html += (
-                f'<tr style="background:{bg};">'
-                f'<td style="padding:9px 12px;font-weight:700;color:#388bfd;font-size:.82rem;'
-                f'border-bottom:1px solid #1c2128;text-align:right;">{sym_ta}</td>'
-                f'<td style="padding:9px 12px;color:#8b949e;font-size:.75rem;'
-                f'border-bottom:1px solid #1c2128;text-align:right;">{nm_ta}</td>'
-                f'<td style="padding:9px 12px;font-family:JetBrains Mono,monospace;'
-                f'font-size:.8rem;color:#e6edf3;font-weight:600;border-bottom:1px solid #1c2128;text-align:right;">{price_ta}</td>'
-                f'<td style="padding:9px 12px;font-family:JetBrains Mono,monospace;'
-                f'font-size:.78rem;color:{clr};font-weight:600;border-bottom:1px solid #1c2128;text-align:right;">{arr}{abs(chg_ta):.2f}%</td>'
-                f'</tr>'
+    with _b2:
+        try:
+            _ts4 = calc_technical_score(df).get("score",50) if df is not None else 50
+            _fs4 = calc_fundamental_score(info).get("score",50) if info else 50
+            _sent4 = max(0,min(100,float((_ts4*0.6+_fs4*0.4) if (_ts4 and _fs4) else 50)))
+            _rsi4 = float(df["RSI"].iloc[-1]) if (df is not None and "RSI" in df.columns) else 50
+            _gpos = 100 - _sent4
+            st.markdown(
+                f'<div style="background:#0D1117;border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:14px 16px;direction:rtl;">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+                f'<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.28);text-transform:uppercase;letter-spacing:0.1em;">מדד סנטימנט משוקלל ({ticker})</span>'
+                f'<span style="background:rgba(31,111,235,0.15);color:#5BB0FF;border:1px solid rgba(56,139,253,0.3);border-radius:3px;padding:1px 8px;font-size:10px;font-weight:600;">חיזוי מאד</span>'
+                f'</div>'
+                f'<div style="position:relative;height:10px;border-radius:5px;'
+                f'background:linear-gradient(to left,#3FB950,#D29922,#F85149);margin-bottom:6px;">'
+                f'<div style="position:absolute;top:-5px;left:{_gpos:.0f}%;transform:translateX(50%);'
+                f'width:20px;height:20px;border-radius:50%;background:#E8ECF1;'
+                f'border:3px solid #0D1117;"></div></div>'
+                f'<div style="display:flex;justify-content:space-between;margin-bottom:12px;">'
+                f'<span style="font-size:10px;color:#3FB950;">חיובי</span>'
+                f'<span style="font-size:10px;color:#D29922;">ניטרלי</span>'
+                f'<span style="font-size:10px;color:#F85149;">שלילי</span></div>'
+                f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">'
+                f'<div style="background:#131820;border:1px solid rgba(255,255,255,0.07);border-radius:5px;padding:8px;text-align:center;">'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:4px;">נפח</div>'
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:16px;font-weight:600;color:#3FB950;">{min(100,int(_sent4*0.85)):.0f}%</div></div>'
+                f'<div style="background:#131820;border:1px solid rgba(255,255,255,0.07);border-radius:5px;padding:8px;text-align:center;">'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:4px;">מומנטום</div>'
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:16px;font-weight:600;color:#3FB950;">{min(100,int(_rsi4)):.0f}%</div></div>'
+                f'<div style="background:#131820;border:1px solid rgba(255,255,255,0.07);border-radius:5px;padding:8px;text-align:center;">'
+                f'<div style="font-size:10px;color:rgba(255,255,255,0.3);margin-bottom:4px;">חדשות</div>'
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:16px;font-weight:600;color:#5BB0FF;">{min(100,int(_sent4*1.1)):.0f}%</div></div>'
+                f'</div>'
+                f'<div style="margin-top:8px;font-size:10px;color:rgba(255,255,255,0.15);">* המדד משקלל כותרות פקודות וסנטימנט תקן בנפח המסחר.</div>'
+                f'</div>',
+                unsafe_allow_html=True
             )
+        except: pass
 
-        st.markdown(
-            f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
-            f'overflow:hidden;direction:rtl;">'
-            f'<div style="padding:14px 16px 10px;border-bottom:1px solid #21262d;">'
-            f'<div style="font-size:.9rem;font-weight:700;color:#e6edf3;text-align:right;">'
-            f'מניות בולטות — {sub_cat}</div>'
-            f'<div style="color:#8b949e;font-size:.7rem;margin-top:2px;text-align:right;">'
-            f'נתונים בזמן אמת · בורסת תל אביב</div>'
-            f'</div>'
-            f'<div style="overflow-x:auto;">'
-            f'<table style="width:100%;border-collapse:collapse;direction:rtl;">'
-            f'<thead><tr>'
-            f'<th {th_rtl}>מניה</th>'
-            f'<th {th_rtl}>שם</th>'
-            f'<th {th_rtl}>מחיר</th>'
-            f'<th {th_rtl}>שינוי</th>'
-            f'</tr></thead>'
-            f'<tbody>{rows_html}</tbody>'
-            f'</table></div></div>',
-            unsafe_allow_html=True
-        )
-
-        # ── כפתורי פתיחה לשוק ישראלי ──
-        if ta_rows:
-            st.markdown('<div style="height:6px;"></div>', unsafe_allow_html=True)
-            ta_btn_cols = st.columns(len(ta_rows))
-            for i, (sym_ta, nm_ta, price_ta, chg_ta) in enumerate(ta_rows):
-                full_sym = sym_ta + ".TA"
-                is_cur = full_sym == st.session_state.ticker or sym_ta == st.session_state.ticker
-                if ta_btn_cols[i].button(sym_ta, key=f"ta_open_{sym_ta}_{i}",
-                                          type="primary" if is_cur else "secondary",
-                                          use_container_width=True):
-                    st.session_state.ticker = full_sym
-                    st.session_state.ai_res = None
-                    if full_sym not in st.session_state.recent:
-                        st.session_state.recent.insert(0, full_sym)
-                        st.session_state.recent = st.session_state.recent[:8]
-                    save_user_data()
-                    st.rerun()
-
-
-    # ── האישי שלי ──
-    elif main_cat == "האישי שלי":
-
-        if sub_cat == "תיק":
-            pf_pos = st.session_state.get('portfolio_positions', [])
-            if not pf_pos:
-                st.markdown(
-                    '<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
-                    'padding:40px;text-align:center;">'
-                    '<div style="font-size:2rem;">💼</div>'
-                    '<div style="color:#8b949e;margin-top:8px;">תיק ריק — הוסיפי מניות בטאב 💼 תיק</div>'
-                    '</div>', unsafe_allow_html=True
-                )
-            else:
-                tv = tc = 0
-                pf_items = []
-                for pos in pf_pos:
-                    pr = get_live_price(pos['symbol']) or pos['cost']
-                    cv = pos['qty']*pr; cc = pos['qty']*pos['cost']
-                    tv += cv; tc += cc
-                    ret = (pr-pos['cost'])/pos['cost']*100
-                    pf_items.append({"sym":pos['symbol'],"name":f"{pos['qty']:.0f} מניות","price":f"${pr:.2f}","chg":ret,"note":f"${cv:,.0f}"})
-                tr = (tv-tc)/tc*100 if tc else 0
-                rc = "#3fb950" if tr>=0 else "#f85149"
-                st.markdown(
-                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'
-                    f'<div style="background:#161b22;border:1px solid #21262d;border-radius:9px;padding:12px;text-align:center;">'
-                    f'<div style="color:#8b949e;font-size:.6rem;text-transform:uppercase;">שווי נוכחי</div>'
-                    f'<div style="font-family:JetBrains Mono,monospace;font-size:.95rem;font-weight:700;color:#e6edf3;">${tv:,.0f}</div></div>'
-                    f'<div style="background:#161b22;border:1px solid #21262d;border-radius:9px;padding:12px;text-align:center;">'
-                    f'<div style="color:#8b949e;font-size:.6rem;text-transform:uppercase;">עלות</div>'
-                    f'<div style="font-family:JetBrains Mono,monospace;font-size:.95rem;font-weight:700;color:#8b949e;">${tc:,.0f}</div></div>'
-                    f'<div style="background:#161b22;border:1px solid {rc}33;border-radius:9px;padding:12px;text-align:center;">'
-                    f'<div style="color:#8b949e;font-size:.6rem;text-transform:uppercase;">תשואה</div>'
-                    f'<div style="font-family:JetBrains Mono,monospace;font-size:.95rem;font-weight:700;color:{rc};">{tr:+.1f}%</div></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-                render_stock_table("💼 תיק השקעות", "", pf_items)
-
-        elif sub_cat == "Watchlist":
-            wl_syms = st.session_state.get('watchlist', [])
-            if not wl_syms:
-                st.markdown(
-                    '<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
-                    'padding:40px;text-align:center;">'
-                    '<div style="font-size:2rem;">👁️</div>'
-                    '<div style="color:#8b949e;margin-top:8px;">Watchlist ריקה — הוסיפי מניות בטאב 👁️</div>'
-                    '</div>', unsafe_allow_html=True
-                )
-            else:
-                wl_items = []
-                for sym_wl in wl_syms[:10]:
-                    try:
-                        p_wl = get_live_price(sym_wl)
-                        d_wl = load_ohlcv(sym_wl, "5D", "1d")
-                        if p_wl and d_wl is not None and len(d_wl) >= 2:
-                            pv = float(d_wl['Close'].iloc[-2])
-                            chg_wl = (p_wl - pv) / pv * 100
-                            wl_items.append({"sym":sym_wl,"name":"","price":f'${p_wl:.2f}',"chg":chg_wl,"note":""})
-                    except: pass
-
-                render_stock_table("👁️ Watchlist", "", wl_items)
-
-        elif sub_cat == "התראות":
-            alerts_h = st.session_state.get('alerts_list', [])
-            if not alerts_h:
-                st.markdown(
-                    '<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
-                    'padding:40px;text-align:center;">'
-                    '<div style="font-size:2rem;">🔔</div>'
-                    '<div style="color:#8b949e;margin-top:8px;">אין התראות פעילות — הגדרי בטאב 🔔</div>'
-                    '</div>', unsafe_allow_html=True
-                )
-            else:
-                st.markdown('<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;overflow:hidden;">',
-                            unsafe_allow_html=True)
-                for a in alerts_h[:8]:
-                    cur_a  = get_live_price(a['sym']) or 0
-                    trig   = a.get("triggered", False)
-                    bc     = "#3fb950" if trig else "#388bfd"
-                    status = "✅ הופעלה" if trig else "⏳ ממתינה"
-                    dist   = ((cur_a - a['target']) / a['target'] * 100) if cur_a else 0
-                    st.markdown(
-                        f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                        f'padding:11px 14px;border-bottom:1px solid #1c2128;">'
-                        f'<div>'
-                        f'<span style="font-weight:700;color:#388bfd;font-size:.82rem;">{a["sym"]}</span>'
-                        f'<span style="color:#8b949e;font-size:.75rem;margin-right:8px;"> {a["cond"]} ${a["target"]:.2f}</span>'
-                        f'</div>'
-                        f'<div style="display:flex;gap:10px;align-items:center;">'
-                        f'<span style="color:#8b949e;font-size:.72rem;">${cur_a:.2f} ({dist:+.1f}%)</span>'
-                        f'<span style="background:{bc}22;color:{bc};border:1px solid {bc}44;'
-                        f'border-radius:10px;padding:2px 8px;font-size:.68rem;font-weight:600;">{status}</span>'
-                        f'</div></div>',
-                        unsafe_allow_html=True
-                    )
-                st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<div style="color:#8b949e;font-size:.6rem;text-align:center;margin-top:14px;">'
-        'Alpha Charts Pro · לצרכי ניתוח בלבד · אינו ייעוץ השקעות</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown('<div style="font-size:10px;color:rgba(255,255,255,0.12);text-align:center;margin-top:8px;">Alpha Charts Pro · לצרכי ניתוח בלבד · אינו ייעוץ השקעות</div>', unsafe_allow_html=True)
 
 
 
 with t1:
 
-    # ── שורת בקרה אחת — period + chart type + actions ──
-    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5 = st.columns([4, 2, 1, 1, 1])
+    # ═══════════════════════════════════════════════════════
+    # TERMINAL TOOLBAR — single compact bar
+    # ═══════════════════════════════════════════════════════
 
-    with ctrl1:
-        np_ = st.radio("period:", list(PERIODS.keys()),
-                       index=list(PERIODS.keys()).index(st.session_state.period),
-                       horizontal=True, label_visibility="collapsed", key="pr")
-        if np_ != st.session_state.period:
-            st.session_state.period = np_
-            st.rerun()
+    # ── Time range — segmented ──
+    _periods_list = list(PERIODS.keys())
+    _cur_period   = st.session_state.period
 
-    with ctrl2:
-        ct_opts = ["קווי", "נרות", "שטח"]
-        ct_vals = {"קווי": "line", "נרות": "candlestick", "שטח": "area"}
-        ct_inv  = {"line": "קווי", "candlestick": "נרות", "area": "שטח"}
-        nct = st.radio("ct:", ct_opts,
-                       index=ct_opts.index(ct_inv[st.session_state.ct]),
-                       horizontal=True, label_visibility="collapsed", key="ctr")
-        if ct_vals[nct] != st.session_state.ct:
-            st.session_state.ct = ct_vals[nct]
-            st.rerun()
+    _period_html = ""
+    for _pk in _periods_list:
+        _pa = _pk == _cur_period
+        _period_html += (
+            f'<span style="padding:3px 9px;cursor:pointer;font-family:JetBrains Mono,monospace;'
+            f'font-size:11px;font-weight:{"700" if _pa else "400"};'
+            f'color:{"#E8ECF1" if _pa else "#7C8897"};'
+            f'background:{"rgba(255,255,255,0.09)" if _pa else "transparent"};'
+            f'border-radius:3px;white-space:nowrap;">{_pk}</span>'
+        )
 
-    with ctrl3:
-        ind_on = st.session_state.show_ind
-        if st.button("Ind" + ("✓" if ind_on else ""), key="aind",
-                     help="Indicators — MA, Bollinger", use_container_width=True):
-            st.session_state.show_ind = not ind_on
-            st.rerun()
+    # ── Chart type — segmented ──
+    _ct_opts   = [("L","line","קווי"),("C","candlestick","נרות"),("A","area","שטח")]
+    _ct_html   = ""
+    for _clab, _cval, _ctip in _ct_opts:
+        _ca = st.session_state.ct == _cval
+        _ct_html += (
+            f'<span title="{_ctip}" style="padding:3px 8px;cursor:pointer;font-family:JetBrains Mono,monospace;'
+            f'font-size:11px;font-weight:{"700" if _ca else "400"};'
+            f'color:{"#E8ECF1" if _ca else "#7C8897"};'
+            f'background:{"rgba(255,255,255,0.09)" if _ca else "transparent"};'
+            f'border-radius:3px;">{_clab}</span>'
+        )
 
-    with ctrl4:
-        ai_on = st.session_state.show_ai
-        if st.button("AI" + ("✓" if ai_on else ""), key="aai",
-                     help="AI Insight", use_container_width=True):
-            st.session_state.show_ai = not ai_on
+    # ── Display-only toolbar ──
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:0;background:#0A0D13;'
+        f'border:1px solid rgba(255,255,255,0.08);border-radius:5px;'
+        f'padding:3px 8px;margin-bottom:6px;direction:ltr;overflow:hidden;">'
+        # Time range group
+        f'<div style="display:flex;align-items:center;gap:1px;padding-right:10px;'
+        f'border-right:1px solid rgba(255,255,255,0.08);">'
+        f'{_period_html}</div>'
+        # Sep
+        f'<div style="width:1px;height:16px;background:rgba(255,255,255,0.08);margin:0 8px;"></div>'
+        # Chart type
+        f'<div style="display:flex;align-items:center;gap:1px;border:1px solid rgba(255,255,255,0.08);'
+        f'border-radius:3px;padding:1px;">{_ct_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # ── Functional controls (hidden label, compact) ──
+    _tc1, _tc2, _tc3, _tc4, _tc5, _tc6, _tc7 = st.columns([4, 2, 1, 1, 1, 1, 1])
+
+    with _tc1:
+        _np = st.radio("P", _periods_list,
+                        index=_periods_list.index(_cur_period),
+                        horizontal=True, label_visibility="collapsed", key="pr")
+        if _np != st.session_state.period:
+            st.session_state.period = _np; st.rerun()
+
+    with _tc2:
+        _ct_labels = ["קווי", "נרות", "שטח"]
+        _ct_vals   = {"קווי":"line","נרות":"candlestick","שטח":"area"}
+        _ct_inv    = {"line":"קווי","candlestick":"נרות","area":"שטח"}
+        _nct = st.radio("T", _ct_labels,
+                         index=_ct_labels.index(_ct_inv[st.session_state.ct]),
+                         horizontal=True, label_visibility="collapsed", key="ctr")
+        if _ct_vals[_nct] != st.session_state.ct:
+            st.session_state.ct = _ct_vals[_nct]; st.rerun()
+
+    with _tc3:
+        _ind_on = st.session_state.show_ind
+        if st.button("IND" + ("●" if _ind_on else ""), key="aind",
+                     use_container_width=True,
+                     type="primary" if _ind_on else "secondary"):
+            st.session_state.show_ind = not _ind_on; st.rerun()
+
+    with _tc4:
+        _an_on = st.session_state.show_an
+        if st.button("DATA" + ("●" if _an_on else ""), key="aan",
+                     use_container_width=True,
+                     type="primary" if _an_on else "secondary"):
+            st.session_state.show_an = not _an_on; st.rerun()
+
+    with _tc5:
+        _ai_on = st.session_state.show_ai
+        if st.button("AI" + ("●" if _ai_on else ""), key="aai",
+                     use_container_width=True,
+                     type="primary" if _ai_on else "secondary"):
+            st.session_state.show_ai = not _ai_on
             if st.session_state.show_ai and st.session_state.ai_res is None:
                 with st.spinner(""):
                     try:
@@ -2416,8 +2504,11 @@ with t1:
                         }
             st.rerun()
 
-    with ctrl5:
-        if st.button("↺", key="arst", help="אפס", use_container_width=True):
+    with _tc6:
+        pass  # spacer
+
+    with _tc7:
+        if st.button("↺", key="arst", use_container_width=True):
             st.session_state.period   = "1Y"
             st.session_state.ct       = "line"
             st.session_state.show_an  = False
@@ -2425,70 +2516,60 @@ with t1:
             st.session_state.show_ind = True
             st.rerun()
 
-    # Analytics button on separate line (wide)
-    an_on = st.session_state.show_an
-    if st.button("📊 Analytics" + (" ✓" if an_on else ""), key="aan",
-                 help="נתונים כספיים רבעוניים"):
-        st.session_state.show_an = not an_on
-        st.rerun()
-
-    # ── Indicators panel ──
+    # ── Indicators panel — compact terminal group ──
     if st.session_state.show_ind:
-        ic1, ic2, ic3, ic4 = st.columns(4)
-        st.session_state.ma20  = ic1.checkbox("MA20",      value=st.session_state.ma20,  key="c20",
-                                              help="ממוצע נע 20 ימים (קו צהוב)")
-        st.session_state.ma50  = ic2.checkbox("MA50",      value=st.session_state.ma50,  key="c50",
-                                              help="ממוצע נע 50 ימים (קו ירוק) — מחיר מעליו = מגמה חיובית")
-        st.session_state.ma200 = ic3.checkbox("MA200",     value=st.session_state.ma200, key="c200",
-                                              help="ממוצע נע 200 ימים (קו אדום) — הקו הכי חשוב")
-        st.session_state.bb    = ic4.checkbox("Bollinger", value=st.session_state.bb,    key="cbb",
-                                              help="רצועות בולינגר — מסגרת התנועה הרגילה")
-        ic5, ic6, ic7, ic8 = st.columns(4)
-        st.session_state.sr        = ic5.checkbox("Support/Resistance", value=st.session_state.sr,        key="csr",
-                                                   help="רמות תמיכה והתנגדות — איפה המחיר עצר בעבר")
-        st.session_state.fib       = ic6.checkbox("Fibonacci",          value=st.session_state.fib,       key="cfib",
-                                                   help="רמות Fibonacci Retracement — 38.2% / 50% / 61.8% וה-Golden Zone")
-        st.session_state.trendline = ic7.checkbox("Trend Line",         value=st.session_state.trendline, key="ctrl",
-                                                   help="קו מגמה אוטומטי לפי נקודות שיא ושפל")
-        st.session_state.channel   = ic8.checkbox("Trend Channel",      value=st.session_state.channel,   key="cch",
-                                                   help="ערוץ מגמה — גבול עליון ותחתון של התנועה")
+        st.markdown(
+            '<div style="background:#0A0D13;border:1px solid rgba(255,255,255,0.08);'
+            'border-radius:4px;padding:5px 10px;margin:3px 0 6px;direction:rtl;">'
+            '<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.28);'
+            'text-transform:uppercase;letter-spacing:0.08em;margin-left:10px;">MA</span>',
+            unsafe_allow_html=True
+        )
+        _ic1, _ic2, _ic3, _ic4, _ic5, _ic6, _ic7, _ic8 = st.columns(8)
+        st.session_state.ma20      = _ic1.checkbox("20",  value=st.session_state.ma20,      key="c20")
+        st.session_state.ma50      = _ic2.checkbox("50",  value=st.session_state.ma50,      key="c50")
+        st.session_state.ma200     = _ic3.checkbox("200", value=st.session_state.ma200,     key="c200")
+        st.session_state.bb        = _ic4.checkbox("BB",  value=st.session_state.bb,        key="cbb")
+        st.session_state.sr        = _ic5.checkbox("S/R", value=st.session_state.sr,        key="csr")
+        st.session_state.fib       = _ic6.checkbox("Fib", value=st.session_state.fib,       key="cfib")
+        st.session_state.trendline = _ic7.checkbox("TL",  value=st.session_state.trendline, key="ctrl")
+        st.session_state.channel   = _ic8.checkbox("CH",  value=st.session_state.channel,   key="cch")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── תיקון נפח 0 ──
+    # ── OHLC Terminal strip ──
     lv_display = lv
     if 'Volume' in df.columns:
         vol_nz = df['Volume'].astype(float).replace(0, pd.NA).dropna()
         if not vol_nz.empty:
             lv_display = float(vol_nz.iloc[-1])
 
-    # ── OHLC Banner ──
-    ohlc_c = "#3fb950" if lc >= lo else "#f85149"
+    _ohlc_c = "#3FB950" if lc >= lo else "#F85149"
+    _vol_s  = f"{lv_display/1e6:.1f}M" if lv_display >= 1e6 else (f"{lv_display/1e3:.0f}K" if lv_display > 0 else "—")
     st.markdown(
-        '<div style="background:#161b22;border:1px solid #21262d;border-radius:8px;'
-        'padding:7px 14px;margin-bottom:4px;direction:rtl;">'
-        '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;'
-        'font-family:\'JetBrains Mono\',monospace;font-size:.82rem;">'
-        f'<span><span style="color:#8b949e;font-size:.65rem;">פתיחה </span>'
-        f'<span style="color:#e6edf3;font-weight:600;">{sym}{lo:.2f}</span></span>'
-        f'<span><span style="color:#8b949e;font-size:.65rem;">גבוה </span>'
-        f'<span style="color:#3fb950;font-weight:700;">{sym}{lh:.2f}</span></span>'
-        f'<span><span style="color:#8b949e;font-size:.65rem;">נמוך </span>'
-        f'<span style="color:#f85149;font-weight:700;">{sym}{ll:.2f}</span></span>'
-        f'<span><span style="color:#8b949e;font-size:.65rem;">סגירה </span>'
-        f'<span style="color:{ohlc_c};font-weight:800;">{sym}{lc:.2f}</span></span>'
-        f'<span><span style="color:#8b949e;font-size:.65rem;">נפח </span>'
-        f'<span style="color:#8b949e;">{lv_display:,.0f}</span></span>'
-        f'<span style="margin-right:auto;color:#8b949e;font-size:.65rem;">'
-        f'{ticker} · {st.session_state.period}</span>'
-        '</div>'
-        '<div style="color:#8b949e;font-size:.65rem;margin-top:3px;'
-        'padding-top:3px;border-top:1px solid #21262d;">'
-        '💡 פתיחה/גבוה/נמוך/סגירה = נתוני יום המסחר האחרון · '
-        '<span style="color:#3fb950;">ירוק = עלייה</span> · '
-        '<span style="color:#f85149;">אדום = ירידה</span>'
-        '</div>'
-        '</div>',
+        f'<div style="background:#080B0F;border:1px solid rgba(255,255,255,0.07);'
+        f'border-radius:4px;padding:4px 12px;margin-bottom:4px;direction:rtl;">'
+        f'<div style="display:flex;gap:0;align-items:center;font-family:JetBrains Mono,monospace;font-size:11px;">'
+        f'<div style="padding:2px 10px;border-left:1px solid rgba(255,255,255,0.07);">'
+        f'<span style="color:rgba(255,255,255,0.28);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;">O </span>'
+        f'<span style="color:#E8ECF1;font-weight:500;">{sym}{lo:.2f}</span></div>'
+        f'<div style="padding:2px 10px;border-left:1px solid rgba(255,255,255,0.07);">'
+        f'<span style="color:rgba(255,255,255,0.28);font-size:9px;text-transform:uppercase;">H </span>'
+        f'<span style="color:#3FB950;font-weight:600;">{sym}{lh:.2f}</span></div>'
+        f'<div style="padding:2px 10px;border-left:1px solid rgba(255,255,255,0.07);">'
+        f'<span style="color:rgba(255,255,255,0.28);font-size:9px;text-transform:uppercase;">L </span>'
+        f'<span style="color:#F85149;font-weight:600;">{sym}{ll:.2f}</span></div>'
+        f'<div style="padding:2px 10px;border-left:1px solid rgba(255,255,255,0.07);">'
+        f'<span style="color:rgba(255,255,255,0.28);font-size:9px;text-transform:uppercase;">C </span>'
+        f'<span style="color:{_ohlc_c};font-weight:700;">{sym}{lc:.2f}</span></div>'
+        f'<div style="padding:2px 10px;border-left:1px solid rgba(255,255,255,0.07);">'
+        f'<span style="color:rgba(255,255,255,0.28);font-size:9px;text-transform:uppercase;">VOL </span>'
+        f'<span style="color:rgba(255,255,255,0.4);">{_vol_s}</span></div>'
+        f'<div style="padding:2px 10px;margin-right:auto;">'
+        f'<span style="color:rgba(255,255,255,0.2);font-size:9px;">{ticker} · {st.session_state.period}</span></div>'
+        f'</div></div>',
         unsafe_allow_html=True
     )
+
 
     # ── CHART ──
     idx   = df.index
