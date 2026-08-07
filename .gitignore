@@ -4,3 +4,4 @@ __pycache__/
 .idea/
 paper_portfolio.json
 .streamlit/secrets.toml
+.streamlit/secrets.toml.txt
