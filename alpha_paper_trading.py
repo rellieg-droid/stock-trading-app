@@ -2145,10 +2145,25 @@ if "active_group" not in st.session_state:
 active_group = st.session_state.active_group
 render_top_nav(active_group)
 active_sub = render_top_pill(active_group)
+
+_TAB_KEYS = ["tabbody_home", "tabbody_chart", "tabbody_analysis", "tabbody_backtest",
+             "tabbody_trade", "tabbody_guide", "tabbody_compare", "tabbody_portfolio",
+             "tabbody_alerts", "tabbody_reports", "tabbody_watchlist"]
+_active_map = {"🏠 Home": "tabbody_home", "📈 גרף": "tabbody_chart", "🎯 ניתוח": "tabbody_analysis",
+               "⏳ Backtest": "tabbody_backtest", "🛒 מסחר": "tabbody_trade", "📖 מדריך": "tabbody_guide",
+               "⚖️ השוואה": "tabbody_compare", "💼 תיק": "tabbody_portfolio", "🔔 התראות": "tabbody_alerts",
+               "📅 דוחות": "tabbody_reports", "👁️ Watchlist": "tabbody_watchlist"}
+_active_key = _active_map.get(active_sub)
+st.markdown(
+    "<style>" + "\n".join(f".st-key-{k} {{ display: none !important; }}"
+                           for k in _TAB_KEYS if k != _active_key) + "</style>",
+    unsafe_allow_html=True,
+)
+
 # ════════════════════════════════════════
 # TAB 1 — CHART
 # ════════════════════════════════════════
-if active_sub == "📈 גרף":
+with st.container(key="tabbody_home"):
     from datetime import datetime as _dt
 
     if "home_main_cat" not in st.session_state:
@@ -2485,7 +2500,7 @@ if active_sub == "📈 גרף":
 
 
 
-if active_sub == "📈 גרף":
+with st.container(key="tabbody_chart"):
 
     # ═══════════════════════════════════════════════════════
     # TERMINAL TOOLBAR — single compact bar
@@ -4544,7 +4559,7 @@ if active_sub == "📈 גרף":
 # ════════════════════════════════════════
 # TAB 2 — DECISION MODULE
 # ════════════════════════════════════════
-if active_sub == "🎯 ניתוח":
+with st.container(key="tabbody_analysis"):
     an_sub1, an_sub2, an_sub3, an_sub4 = st.tabs(["🎯 סיכום והחלטה", "🤖 AI ניתוח מתקדם", "📊 סטאפ המשך מגמה", "⚠️ Position Sizing"])
 
     with an_sub1:
@@ -5078,7 +5093,7 @@ document.getElementById("ql-high") && (document.getElementById("ql-high").style.
 # ════════════════════════════════════════
 # TAB 3 — Backtest (Professional)
 # ════════════════════════════════════════
-if active_sub == "⏳ Backtest":
+with st.container(key="tabbody_backtest"):
     st.markdown(f"### ⏳ Backtest — {ticker}")
     st.markdown(
         '<div style="color:#8b949e;font-size:.78rem;margin-bottom:12px;">'
@@ -5397,7 +5412,7 @@ if active_sub == "⏳ Backtest":
 # ════════════════════════════════════════
 # TAB 4 — מסחר
 # ════════════════════════════════════════
-if active_sub == "🛒 מסחר":
+with st.container(key="tabbody_trade"):
     tr_sub1, tr_sub2 = st.tabs(["🛒 מסחר", "📊 ביצועים"])
 
     with tr_sub1:
@@ -5512,7 +5527,7 @@ if active_sub == "🛒 מסחר":
         # ════════════════════════════════════════
         # TAB 7 — מדריך למשתמש
         # ════════════════════════════════════════
-if active_sub == "📖 מדריך":
+with st.container(key="tabbody_guide"):
     st.markdown("""
 <div style="direction:rtl;max-width:900px;margin:0 auto;">
 
@@ -5976,7 +5991,7 @@ if active_sub == "📖 מדריך":
     # TAB 9 — השוואת מניות
     # ════════════════════════════════════════
 
-if active_sub == "⚖️ השוואה":
+with st.container(key="tabbody_compare"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">⚖️ השוואת מניות</div>'
@@ -6289,7 +6304,7 @@ if active_sub == "⚖️ השוואה":
 # ════════════════════════════════════════
 # TAB 10 — 💼 Portfolio Tracker
 # ════════════════════════════════════════
-if active_sub == "💼 תיק":
+with st.container(key="tabbody_portfolio"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">💼 Portfolio Tracker — תיק עסקאות</div>'
@@ -6437,7 +6452,7 @@ if active_sub == "💼 תיק":
 # ════════════════════════════════════════
 # TAB 11 — 🔔 Price Alerts
 # ════════════════════════════════════════
-if active_sub == "🔔 התראות":
+with st.container(key="tabbody_alerts"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">🔔 Price Alerts — התראות מחיר</div>'
@@ -6534,7 +6549,7 @@ if active_sub == "🔔 התראות":
 # ════════════════════════════════════════
 # TAB 12 — 📅 Earnings Calendar
 # ════════════════════════════════════════
-if active_sub == "📅 דוחות":
+with st.container(key="tabbody_reports"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">📅 Earnings Calendar — לוח דוחות</div>'
@@ -6645,7 +6660,7 @@ if active_sub == "📅 דוחות":
 # ════════════════════════════════════════
 # TAB 13 — 👁️ Watchlist
 # ════════════════════════════════════════
-if active_sub == "👁️ Watchlist":
+with st.container(key="tabbody_watchlist"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">👁️ Watchlist — רשימת מעקב</div>'
