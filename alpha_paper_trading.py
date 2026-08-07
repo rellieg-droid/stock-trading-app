@@ -1910,10 +1910,16 @@ if df is None:
         f'<div style="font-size:3rem;">⚠️</div>'
         f'<div style="font-size:1.2rem;font-weight:600;color:#e6edf3;margin:10px 0;">'
         f'לא ניתן לטעון נתונים עבור \'{ticker}\'</div>'
-        f'<div style="color:#8b949e;">בדקי שהסימול נכון ונסי שוב</div>'
+        f'<div style="color:#8b949e;">בדקי שהסימול נכון ונסי שוב, או בחרי טיקר למטה</div>'
         f'</div>', unsafe_allow_html=True
     )
-    st.info("💡 נסי: AAPL · TSLA · MSFT · GOOGL · NVDA · TEVA · CHKP")
+    st.info("💡 בעיה זמנית מול Yahoo Finance קורית לפעמים. לחיצה על אחד מהכפתורים מטה מנסה טיקר אחר:")
+    _esc_cols = st.columns(7)
+    for _esc_sym, _esc_col in zip(["AAPL", "TSLA", "MSFT", "GOOGL", "NVDA", "TEVA", "CHKP.TA"], _esc_cols):
+        with _esc_col:
+            if st.button(_esc_sym, key=f"esc_{_esc_sym}", use_container_width=True):
+                st.session_state.ticker = _esc_sym
+                st.rerun()
     st.stop()
 
 # ── Derived values ──
@@ -2052,7 +2058,7 @@ with _h_col_search:
 w52l = info.get("fiftyTwoWeekLow"); w52h = info.get("fiftyTwoWeekHigh")
 prev_c = info.get("previousClose")
 st.markdown(
-    f'<div class="t-card fade-in" style="padding:18px 22px;margin-bottom:10px;direction:rtl;">'
+    f'<div class="t-card fade-in" style="padding:18px 22px;margin-bottom:10px;direction:ltr;text-align:right;">'
     f'<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">'
     f'<span style="font-family:JetBrains Mono,monospace;font-size:var(--fs-36);font-weight:800;color:var(--c-text-1);letter-spacing:-0.02em;">{sym}{cp:.2f}</span>'
     f'<span style="background:{chg_c}1f;color:{chg_c};border:1px solid {chg_c}44;'
@@ -2506,167 +2512,140 @@ with st.container(key="tabbody_chart"):
     # TERMINAL TOOLBAR — single compact bar
     # ═══════════════════════════════════════════════════════
 
-    # ── Time range — segmented ──
+    # ── Toolbar — single unified row (Yahoo/Investing style pills) ──
     _periods_list = list(PERIODS.keys())
     _cur_period   = st.session_state.period
+    _ct_opts      = [("line", "קווי"), ("candlestick", "נרות"), ("area", "שטח")]
 
-    _period_html = ""
-    for _pk in _periods_list:
-        _pa = _pk == _cur_period
-        _period_html += (
-            f'<span style="padding:3px 9px;cursor:pointer;font-family:JetBrains Mono,monospace;'
-            f'font-size:11px;font-weight:{"700" if _pa else "400"};'
-            f'color:{"#E8ECF1" if _pa else "#7C8897"};'
-            f'background:{"rgba(255,255,255,0.09)" if _pa else "transparent"};'
-            f'border-radius:3px;white-space:nowrap;">{_pk}</span>'
-        )
+    st.markdown("""
+    <style>
+    .st-key-toolbar_row .stButton > button {
+        background: transparent !important;
+        border: 1px solid var(--c-border) !important;
+        color: var(--c-text-2) !important;
+        border-radius: 999px !important;
+        font-family: var(--ff-mono) !important;
+        font-size: 10.5px !important;
+        font-weight: 600 !important;
+        padding: 4px 2px !important;
+        white-space: nowrap !important;
+        min-width: 0 !important;
+        transition: all 0.15s ease !important;
+    }
+    .st-key-toolbar_row .stButton > button:hover {
+        background: var(--c-surface-2) !important;
+        border-color: var(--c-border-md) !important;
+        color: var(--c-text-1) !important;
+    }
+    .st-key-toolbar_row .stButton > button:focus-visible {
+        outline: 2px solid var(--c-blue) !important;
+        outline-offset: 1px !important;
+    }
+    .st-key-toolbar_row .stButton > button[kind="primary"] {
+        background: var(--c-blue) !important;
+        border-color: var(--c-blue) !important;
+        color: #fff !important;
+    }
+    .st-key-toolbar_row .stButton > button[kind="primary"]:hover {
+        background: var(--c-blue-lt) !important;
+        border-color: var(--c-blue-lt) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # ── Chart type — segmented ──
-    _ct_opts   = [("L","line","קווי"),("C","candlestick","נרות"),("A","area","שטח")]
-    _ct_html   = ""
-    for _clab, _cval, _ctip in _ct_opts:
-        _ca = st.session_state.ct == _cval
-        _ct_html += (
-            f'<span title="{_ctip}" style="padding:3px 8px;cursor:pointer;font-family:JetBrains Mono,monospace;'
-            f'font-size:11px;font-weight:{"700" if _ca else "400"};'
-            f'color:{"#E8ECF1" if _ca else "#7C8897"};'
-            f'background:{"rgba(255,255,255,0.09)" if _ca else "transparent"};'
-            f'border-radius:3px;">{_clab}</span>'
-        )
+    with st.container(key="toolbar_row"):
+        _n_items = 1 + len(_periods_list) + len(_ct_opts) + 3  # settings + periods + chart-types + DATA + AI + reset
+        _tb_cols = st.columns(_n_items)
+        _i = 0
 
-    # ── Display-only toolbar ──
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:0;background:#0A0D13;'
-        f'border:1px solid rgba(255,255,255,0.08);border-radius:5px;'
-        f'padding:3px 8px;margin-bottom:6px;direction:ltr;overflow:hidden;">'
-        # Time range group
-        f'<div style="display:flex;align-items:center;gap:1px;padding-right:10px;'
-        f'border-right:1px solid rgba(255,255,255,0.08);">'
-        f'{_period_html}</div>'
-        # Sep
-        f'<div style="width:1px;height:16px;background:rgba(255,255,255,0.08);margin:0 8px;"></div>'
-        # Chart type
-        f'<div style="display:flex;align-items:center;gap:1px;border:1px solid rgba(255,255,255,0.08);'
-        f'border-radius:3px;padding:1px;">{_ct_html}</div>'
-        f'</div>',
-        unsafe_allow_html=True
-    )
+        with _tb_cols[_i]:
+            with st.popover("⚙ ⌄", use_container_width=True):
+                st.caption("הגדרות תצוגה נוספות")
+                st.caption("(מקום שמור להרחבות עתידיות)")
+        _i += 1
 
-    # ── Functional controls (hidden label, compact) ──
-    _tc1, _tc2, _tc3, _tc4, _tc5, _tc6, _tc7 = st.columns([4, 2, 1, 1, 1, 1, 1])
+        for _pk in _periods_list:
+            with _tb_cols[_i]:
+                if st.button(_pk, key=f"period_{_pk}", use_container_width=True,
+                             type="primary" if _pk == _cur_period else "secondary"):
+                    st.session_state.period = _pk
+                    st.rerun()
+            _i += 1
 
-    with _tc1:
-        _np = st.radio("P", _periods_list,
-                        index=_periods_list.index(_cur_period),
-                        horizontal=True, label_visibility="collapsed", key="pr")
-        if _np != st.session_state.period:
-            st.session_state.period = _np; st.rerun()
+        for _cval, _clab in _ct_opts:
+            with _tb_cols[_i]:
+                if st.button(_clab, key=f"ct_{_cval}", use_container_width=True,
+                             type="primary" if st.session_state.ct == _cval else "secondary"):
+                    st.session_state.ct = _cval
+                    st.rerun()
+            _i += 1
 
-    with _tc2:
-        _ct_labels = ["קווי", "נרות", "שטח"]
-        _ct_vals   = {"קווי":"line","נרות":"candlestick","שטח":"area"}
-        _ct_inv    = {"line":"קווי","candlestick":"נרות","area":"שטח"}
-        _nct = st.radio("T", _ct_labels,
-                         index=_ct_labels.index(_ct_inv[st.session_state.ct]),
-                         horizontal=True, label_visibility="collapsed", key="ctr")
-        if _ct_vals[_nct] != st.session_state.ct:
-            st.session_state.ct = _ct_vals[_nct]; st.rerun()
+        with _tb_cols[_i]:
+            _an_on = st.session_state.show_an
+            if st.button("DATA" + ("●" if _an_on else ""), key="aan",
+                         use_container_width=True,
+                         type="primary" if _an_on else "secondary"):
+                st.session_state.show_an = not _an_on; st.rerun()
+        _i += 1
 
-    with _tc3:
-        _ind_on = st.session_state.show_ind
-        if st.button("IND" + ("●" if _ind_on else ""), key="aind",
-                     use_container_width=True,
-                     type="primary" if _ind_on else "secondary"):
-            st.session_state.show_ind = not _ind_on; st.rerun()
+        with _tb_cols[_i]:
+            _ai_on = st.session_state.show_ai
+            if st.button("AI" + ("●" if _ai_on else ""), key="aai",
+                         use_container_width=True,
+                         type="primary" if _ai_on else "secondary"):
+                st.session_state.show_ai = not _ai_on
+                if st.session_state.show_ai and st.session_state.ai_res is None:
+                    with st.spinner(""):
+                        try:
+                            cl2     = df['Close'].astype(float)
+                            lc2     = float(cl2.iloc[-1]); pc2 = float(cl2.iloc[-2])
+                            dc2     = (lc2 - pc2) / pc2 * 100
+                            rsi2    = float(df['RSI'].iloc[-1]) if 'RSI' in df.columns else 50
+                            ma200_2 = float(df['MA200'].iloc[-1]) if 'MA200' in df.columns else lc2
+                            vok2    = False
+                            if 'Volume' in df.columns:
+                                vol2 = df['Volume'].astype(float)
+                                avg2 = float(vol2.rolling(20).mean().iloc[-1])
+                                vok2 = float(vol2.iloc[-1]) > avg2 * 1.2 if avg2 > 0 else False
+                            prompt = (
+                                f"Analyze {ticker}: price {lc2:.2f}, change {dc2:+.2f}%, "
+                                f"RSI {rsi2:.0f}, "
+                                + ("above" if lc2 > ma200_2 else "below")
+                                + " MA200. Return ONLY JSON no markdown: "
+                                '{"trend":"שורי/דובי/נייטרלי","strength":"חזק/בינוני/חלש",'
+                                '"signal":"3 words Hebrew","vol_ok":' + str(vok2).lower() + ','
+                                '"summary":"2 sentences Hebrew","detail":"1 sentence Hebrew"}'
+                            )
+                            resp = requests.post(
+                                "https://api.anthropic.com/v1/messages",
+                                headers=ai_headers(),
+                                json={"model": "claude-sonnet-4-20250514", "max_tokens": 300,
+                                      "messages": [{"role": "user", "content": prompt}]},
+                                timeout=15
+                            )
+                            if resp.status_code == 200:
+                                txt = resp.json()['content'][0]['text'].strip().replace("```json","").replace("```","")
+                                st.session_state.ai_res = json.loads(txt)
+                            else:
+                                raise Exception()
+                        except:
+                            st.session_state.ai_res = {
+                                "trend": "שורי" if dc2 > 0 else "דובי",
+                                "strength": "בינוני", "signal": "איתות מתון",
+                                "vol_ok": False,
+                                "summary": f"המניה {ticker} שינתה {dc2:+.2f}% עם RSI {rsi2:.0f}.",
+                                "detail": f"הנר נסגר {'בעלייה' if dc2>0 else 'בירידה'}.",
+                            }
+                st.rerun()
+        _i += 1
 
-    with _tc4:
-        _an_on = st.session_state.show_an
-        if st.button("DATA" + ("●" if _an_on else ""), key="aan",
-                     use_container_width=True,
-                     type="primary" if _an_on else "secondary"):
-            st.session_state.show_an = not _an_on; st.rerun()
-
-    with _tc5:
-        _ai_on = st.session_state.show_ai
-        if st.button("AI" + ("●" if _ai_on else ""), key="aai",
-                     use_container_width=True,
-                     type="primary" if _ai_on else "secondary"):
-            st.session_state.show_ai = not _ai_on
-            if st.session_state.show_ai and st.session_state.ai_res is None:
-                with st.spinner(""):
-                    try:
-                        cl2     = df['Close'].astype(float)
-                        lc2     = float(cl2.iloc[-1]); pc2 = float(cl2.iloc[-2])
-                        dc2     = (lc2 - pc2) / pc2 * 100
-                        rsi2    = float(df['RSI'].iloc[-1]) if 'RSI' in df.columns else 50
-                        ma200_2 = float(df['MA200'].iloc[-1]) if 'MA200' in df.columns else lc2
-                        vok2    = False
-                        if 'Volume' in df.columns:
-                            vol2 = df['Volume'].astype(float)
-                            avg2 = float(vol2.rolling(20).mean().iloc[-1])
-                            vok2 = float(vol2.iloc[-1]) > avg2 * 1.2 if avg2 > 0 else False
-                        prompt = (
-                            f"Analyze {ticker}: price {lc2:.2f}, change {dc2:+.2f}%, "
-                            f"RSI {rsi2:.0f}, "
-                            + ("above" if lc2 > ma200_2 else "below")
-                            + " MA200. Return ONLY JSON no markdown: "
-                            '{"trend":"שורי/דובי/נייטרלי","strength":"חזק/בינוני/חלש",'
-                            '"signal":"3 words Hebrew","vol_ok":' + str(vok2).lower() + ','
-                            '"summary":"2 sentences Hebrew","detail":"1 sentence Hebrew"}'
-                        )
-                        resp = requests.post(
-                            "https://api.anthropic.com/v1/messages",
-                            headers=ai_headers(),
-                            json={"model": "claude-sonnet-4-20250514", "max_tokens": 300,
-                                  "messages": [{"role": "user", "content": prompt}]},
-                            timeout=15
-                        )
-                        if resp.status_code == 200:
-                            txt = resp.json()['content'][0]['text'].strip().replace("```json","").replace("```","")
-                            st.session_state.ai_res = json.loads(txt)
-                        else:
-                            raise Exception()
-                    except:
-                        st.session_state.ai_res = {
-                            "trend": "שורי" if dc2 > 0 else "דובי",
-                            "strength": "בינוני", "signal": "איתות מתון",
-                            "vol_ok": False,
-                            "summary": f"המניה {ticker} שינתה {dc2:+.2f}% עם RSI {rsi2:.0f}.",
-                            "detail": f"הנר נסגר {'בעלייה' if dc2>0 else 'בירידה'}.",
-                        }
-            st.rerun()
-
-    with _tc6:
-        pass  # spacer
-
-    with _tc7:
-        if st.button("↺", key="arst", use_container_width=True):
-            st.session_state.period   = "1Y"
-            st.session_state.ct       = "line"
-            st.session_state.show_an  = False
-            st.session_state.show_ai  = False
-            st.session_state.show_ind = True
-            st.rerun()
-
-    # ── Indicators panel — compact terminal group ──
-    if st.session_state.show_ind:
-        st.markdown(
-            '<div style="background:#0A0D13;border:1px solid rgba(255,255,255,0.08);'
-            'border-radius:4px;padding:5px 10px;margin:3px 0 6px;direction:rtl;">'
-            '<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.28);'
-            'text-transform:uppercase;letter-spacing:0.08em;margin-left:10px;">MA</span>',
-            unsafe_allow_html=True
-        )
-        _ic1, _ic2, _ic3, _ic4, _ic5, _ic6, _ic7, _ic8 = st.columns(8)
-        st.session_state.ma20      = _ic1.checkbox("20",  value=st.session_state.ma20,      key="c20")
-        st.session_state.ma50      = _ic2.checkbox("50",  value=st.session_state.ma50,      key="c50")
-        st.session_state.ma200     = _ic3.checkbox("200", value=st.session_state.ma200,     key="c200")
-        st.session_state.bb        = _ic4.checkbox("BB",  value=st.session_state.bb,        key="cbb")
-        st.session_state.sr        = _ic5.checkbox("S/R", value=st.session_state.sr,        key="csr")
-        st.session_state.fib       = _ic6.checkbox("Fib", value=st.session_state.fib,       key="cfib")
-        st.session_state.trendline = _ic7.checkbox("TL",  value=st.session_state.trendline, key="ctrl")
-        st.session_state.channel   = _ic8.checkbox("CH",  value=st.session_state.channel,   key="cch")
-        st.markdown('</div>', unsafe_allow_html=True)
+        with _tb_cols[_i]:
+            if st.button("↺", key="arst", use_container_width=True):
+                st.session_state.period   = "1Y"
+                st.session_state.ct       = "line"
+                st.session_state.show_an  = False
+                st.session_state.show_ai  = False
+                st.rerun()
 
     # ── OHLC Terminal strip ──
     lv_display = lv
@@ -2902,11 +2881,55 @@ with st.container(key="tabbody_chart"):
 
     axis_s = dict(gridcolor=GR, zeroline=False, color='#8b949e', showgrid=True, linecolor=GR)
 
+    # ── Gap elimination — same logic already solved in mobile_layout_test.py ──
+    # 1D = single session, no gaps to hide. 5D = intraday across several
+    # sessions, needs both overnight hours AND weekends hidden. Daily+ views
+    # only need weekends hidden (no intraday hour gaps to worry about).
+    _cur_period = st.session_state.period
+    if _cur_period == "1D":
+        _x_rangebreaks = []
+    elif _cur_period == "5D":
+        _x_rangebreaks = [dict(bounds=[16, 9.5], pattern="hour"), dict(bounds=["sat", "mon"])]
+    else:
+        _x_rangebreaks = [dict(bounds=["sat", "mon"])]
+
+    # ── Density fix for sparse timeframes (e.g. 1M's ~21 candles vs 6M's ~126) ──
+    # Same fix already used in mobile_layout_test.py: pad the x-axis range with
+    # empty margin on both sides so few-candle timeframes don't stretch their
+    # candles apart with big gaps — keeps spacing visually consistent across
+    # timeframes instead of 1M looking sparser/emptier than the others.
+    _n_bars = len(idx)
+    _min_visible_slots = 100
+    _x_padded_range = None
+    if 2 <= _n_bars < _min_visible_slots and _cur_period != "1D":
+        _missing = _min_visible_slots - _n_bars
+        _pad_each_side = _missing // 2
+        if _pad_each_side >= 1:
+            _bday = pd.tseries.offsets.BDay(_pad_each_side)
+            _idx_dt = pd.to_datetime(pd.Series(idx))
+            _x_padded_range = [_idx_dt.iloc[0] - _bday, _idx_dt.iloc[-1] + _bday]
+
+    # ── Per-timeframe tick FORMAT, with DYNAMIC tick placement ──
+    # tickmode="auto" (Plotly's default) lets Plotly decide how many ticks
+    # fit at the CURRENT zoom level and re-place them live as the person
+    # zooms/pans — this is what makes zooming into 1D reveal per-hour (then
+    # per-minute) labels instead of staying stuck at ~6 fixed spots. We only
+    # fix the FORMAT per timeframe, never the positions.
+    _tick_fmt_map = {
+        "1D": "%I:%M %p", "5D": "%d %b", "1M": "%d %b",
+        "6M": "%b %y", "YTD": "%b %y", "1Y": "%b %y",
+        "5Y": "%Y", "MAX": "%Y",
+    }
+    _tfmt = _tick_fmt_map.get(_cur_period, "%d %b")
+
     # crosshair — קו אנכי ואופקי מקווקו
     spike_x = dict(
         showspikes=True, spikecolor='#4a90d9',
         spikethickness=1, spikedash='dash',
         spikemode='across', spikesnap='cursor',
+        rangebreaks=_x_rangebreaks,
+        range=_x_padded_range, autorange=(_x_padded_range is None),
+        tickformat=_tfmt, nticks=12,
     )
     spike_y = dict(
         showspikes=True, spikecolor='#4a90d9',
