@@ -109,7 +109,22 @@ def inject_css():
         z-index: 999;
         margin: 0 !important;
     }
-    .bottom-nav-btn button {
+    /* Target buttons via st.container(key=...), which creates a REAL DOM
+       wrapper (class "st-key-top_nav") — unlike the markdown-div trick,
+       this one actually nests. Avoids :has(), which isn't reliably
+       supported in Streamlit's embedded browser. */
+    .st-key-top_nav {
+        position: sticky;
+        top: 0;
+        width: 100%;
+        background: rgba(5, 7, 13, 0.94);
+        backdrop-filter: var(--glass-blur);
+        border-bottom: 1px solid var(--c-border);
+        padding: 0.5rem 0.6rem;
+        z-index: 999;
+        margin-bottom: 0.8rem;
+    }
+    .st-key-top_nav .stButton > button {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -119,7 +134,7 @@ def inject_css():
         width: 100% !important;
         padding: 0 !important;
     }
-    .bottom-nav-btn-active button {
+    .st-key-top_nav .stButton > button[kind="primary"] {
         background: var(--c-blue-dim) !important;
         border-radius: 50% !important;
         color: var(--c-blue) !important;
@@ -184,20 +199,20 @@ def render_top_pill(active_group):
     return selected
 
 
-def render_bottom_nav(active_group):
-    st.markdown('<div class="bottom-nav-spacer"></div>', unsafe_allow_html=True)
-    cols = st.columns(len(GROUP_ORDER))
-    for i, group in enumerate(GROUP_ORDER):
-        with cols[i]:
-            is_active = (group == active_group)
-            st.markdown(
-                f'<div class="bottom-nav-btn{" bottom-nav-btn-active" if is_active else ""} bottom-nav-marker">',
-                unsafe_allow_html=True,
-            )
-            if st.button(GROUP_BOTTOM_ICONS[group], key=f"nav_{group}", use_container_width=True):
-                st.session_state.active_group = group
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+def render_top_nav(active_group):
+    with st.container(key="top_nav"):
+        cols = st.columns(len(GROUP_ORDER))
+        for i, group in enumerate(GROUP_ORDER):
+            with cols[i]:
+                is_active = (group == active_group)
+                if st.button(
+                    GROUP_BOTTOM_ICONS[group],
+                    key=f"nav_{group}",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary",
+                ):
+                    st.session_state.active_group = group
+                    st.rerun()
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -210,15 +225,15 @@ def main():
     if "active_group" not in st.session_state:
         st.session_state.active_group = "בית"
 
+    active_group = st.session_state.active_group
+    render_top_nav(active_group)
+
     st.markdown('<h3 style="text-align:center;">Alpha Charts Pro 👑</h3>', unsafe_allow_html=True)
     st.write("")
 
-    active_group = st.session_state.active_group
     active_sub = render_top_pill(active_group)
 
     page_placeholder(active_sub)
-
-    render_bottom_nav(active_group)
 
 
 if __name__ == "__main__":
