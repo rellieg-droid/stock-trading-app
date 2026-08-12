@@ -110,6 +110,7 @@ def inject_css():
             backdrop-filter: blur(18px) saturate(140%);
             -webkit-backdrop-filter: blur(18px) saturate(140%);
             box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.4);
             padding: 1rem 1.05rem;
         }}
 
