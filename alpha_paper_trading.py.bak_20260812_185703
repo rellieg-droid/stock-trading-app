@@ -856,6 +856,147 @@ def load_info(symbol: str) -> dict:
         return {}
 
 @st.cache_data(ttl=3600)
+def next_earnings(symbol: str) -> tuple[str, int] | None:
+    """
+    מחזיר (תאריך בפורמט dd/mm/yyyy, ימים עד הדוח) או None אם אין נתון.
+    ימים שליליים = הדוח כבר היה ויאהו טרם עדכנה.
+    """
+    try:
+        inf = load_info(symbol)
+        ned = inf.get("earningsDate") or inf.get("earningsTimestamp")
+        if isinstance(ned, (list, tuple)):
+            ned = ned[0] if ned else None
+        if not ned:
+            return None
+        if isinstance(ned, (int, float)):
+            ned_dt = datetime.fromtimestamp(ned)
+        else:
+            ned_dt = pd.Timestamp(ned).to_pydatetime()
+        days = (ned_dt.date() - datetime.now().date()).days
+        return ned_dt.strftime("%d/%m/%Y"), days
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=300)
+def load_vix() -> float | None:
+    """ערך VIX הנוכחי. None אם השליפה נכשלה."""
+    try:
+        h = yf.Ticker("^VIX").history(period="5d", interval="1d")
+        if h is None or h.empty:
+            return None
+        return float(h["Close"].iloc[-1])
+    except Exception:
+        return None
+
+
+def _earnings_badge_html(symbol: str) -> str:
+    """באדג' דוח הבא. מחרוזת ריקה אם אין נתון — עדיף כלום מ'לא ידוע'."""
+    res = next_earnings(symbol)
+    if not res:
+        return ""
+    date_str, days = res
+    if days < 0:
+        return ""
+    if days <= 14:
+        clr, icon, label = "#F5454F", "⚠️", f"דוח בעוד {days} ימים"
+    elif days <= 30:
+        clr, icon, label = "#E8B84B", "📅", f"דוח בעוד {days} ימים"
+    else:
+        clr, icon, label = "#8B93A7", "📅", f"דוח: {date_str}"
+    return (
+        f'<span title="תאריך הדוח הבא: {date_str}" '
+        f'style="background:{clr}1f;color:{clr};border:1px solid {clr}44;'
+        f'border-radius:10px;padding:4px 10px;font-size:.72rem;font-weight:600;'
+        f'white-space:nowrap;">{icon} {label}</span>'
+    )
+
+
+def _vix_badge_html() -> str:
+    """באדג' VIX בשלוש רמות. מחרוזת ריקה אם השליפה נכשלה."""
+    v = load_vix()
+    if v is None:
+        return ""
+    if v < 20:
+        clr, label = "#2BD46B", "שוק רגוע"
+    elif v <= 25:
+        clr, label = "#E8B84B", "תנודתיות בינונית"
+    else:
+        clr, label = "#F5454F", "שוק תנודתי"
+    return (
+        f'<span title="מדד התנודתיות VIX. מתחת ל-20 רגוע, מעל 25 תנודתי." '
+        f'style="background:{clr}1f;color:{clr};border:1px solid {clr}44;'
+        f'border-radius:10px;padding:4px 10px;font-size:.72rem;font-weight:600;'
+        f'white-space:nowrap;">VIX {v:.1f} · {label}</span>'
+    )
+
+
+def true_atr(df, period: int = 14) -> float | None:
+    """
+    ATR אמיתי בשיטת Wilder.
+    True Range = המקסימום מבין:
+        High - Low
+        |High - Close הקודם|
+        |Low  - Close הקודם|
+    בניגוד ל-(High-Low) בלבד, זה תופס גאפים בין סגירה לפתיחה.
+    """
+    try:
+        if df is None or len(df) < period + 1:
+            return None
+        h = df["High"].astype(float)
+        l = df["Low"].astype(float)
+        c = df["Close"].astype(float)
+        pc = c.shift(1)
+        tr = pd.concat([h - l, (h - pc).abs(), (l - pc).abs()], axis=1).max(axis=1)
+        # החלקת Wilder = ewm עם alpha=1/period
+        atr = tr.ewm(alpha=1 / period, adjust=False).mean().iloc[-1]
+        if pd.isna(atr):
+            return None
+        return float(atr)
+    except Exception:
+        return None
+
+
+def atr_percent(symbol: str) -> float | None:
+    """
+    ATR באחוזים מהמחיר, על נתונים יומיים.
+    מכוון תמיד ל-3M/1d כדי שהמספר לא ישתנה בכל החלפת טיימפריים בגרף.
+    """
+    try:
+        d = load_ohlcv(symbol, "3mo", "1d")
+        if d is None or d.empty:
+            return None
+        a = true_atr(d)
+        if a is None:
+            return None
+        last = float(d["Close"].iloc[-1])
+        if last <= 0:
+            return None
+        return a / last * 100
+    except Exception:
+        return None
+
+
+def _atr_badge_html(symbol: str) -> str:
+    """באדג' ATR%. מחרוזת ריקה אם אין נתון."""
+    p = atr_percent(symbol)
+    if p is None:
+        return ""
+    if p > 4:
+        clr, label = "#F5454F", "תנודתיות גבוהה"
+    elif p > 2:
+        clr, label = "#E8B84B", "תנודתיות בינונית"
+    else:
+        clr, label = "#2BD46B", "תנודתיות נמוכה"
+    return (
+        f'<span title="ATR יומי כאחוז מהמחיר. התנועה היומית הטיפוסית של המניה." '
+        f'style="background:{clr}1f;color:{clr};border:1px solid {clr}44;'
+        f'border-radius:10px;padding:4px 10px;font-size:.72rem;font-weight:600;'
+        f'white-space:nowrap;">ATR {p:.1f}% · {label}</span>'
+    )
+
+
+@st.cache_data(ttl=3600)
 def load_quarterly(symbol: str) -> list | None:
     try:
         qf = yf.Ticker(symbol).quarterly_financials
@@ -2065,6 +2206,9 @@ st.markdown(
     f'border-radius:10px;padding:4px 12px;font-size:.92rem;font-weight:700;">'
     f'{chg_a} {sym}{abs(da):.2f} ({dc:+.2f}%)</span>'
     f'<span style="color:var(--c-text-3);font-size:.75rem;">היום</span>'
+    + _earnings_badge_html(ticker)
+    + _vix_badge_html()
+    + _atr_badge_html(ticker)
     + (f'<span style="color:var(--c-text-3);font-size:.72rem;margin-right:auto;">52ש׳: {sym}{w52l:.2f} – {sym}{w52h:.2f}</span>' if w52l and w52h else '')
     + (f'<span style="color:var(--c-text-3);font-size:.72rem;">סגירה קודמת: {sym}{prev_c:.2f}</span>' if prev_c else '')
     + f'</div></div>',
@@ -2433,7 +2577,7 @@ with st.container(key="tabbody_home"):
             _wl_rows3 = []
             for _ws3 in _wl3[:8]:
                 _wp3 = get_live_price(_ws3)
-                _wd3 = load_ohlcv(_ws3,"5D","1d")
+                _wd3 = load_ohlcv(_ws3,"5d","1d")
                 _wc3 = 0
                 if _wp3 and _wd3 is not None and len(_wd3)>=2:
                     _wc3 = (_wp3-float(_wd3["Close"].iloc[-2]))/float(_wd3["Close"].iloc[-2])*100
@@ -2449,7 +2593,7 @@ with st.container(key="tabbody_home"):
 
     with _b1:
         try:
-            _df_v = load_ohlcv(ticker,"5D","1h") if ticker else None
+            _df_v = load_ohlcv(ticker,"5d","1h") if ticker else None
             if _df_v is not None and "Volume" in _df_v.columns and len(_df_v)>0:
                 _vv = _df_v["Volume"].astype(float).tail(14)
                 _mx_v = float(_vv.max()) if len(_vv)>0 else 1
@@ -4264,10 +4408,9 @@ with st.container(key="tabbody_chart"):
 
         # Volatility (ATR proxy)
         if len(df) >= 14:
-            hi = df['High'].astype(float); lo = df['Low'].astype(float)
             cl = df['Close'].astype(float)
-            atr = (hi - lo).rolling(14).mean().iloc[-1]
-            atr_pct = atr / cl.iloc[-1] * 100
+            _a = true_atr(df)
+            atr_pct = (_a / cl.iloc[-1] * 100) if _a else 0.0
             max_pts += 30
             if atr_pct > 4:    risk_pts += 30; factors.append(f"תנודתיות גבוהה (ATR {atr_pct:.1f}%)")
             elif atr_pct > 2:  risk_pts += 15; factors.append(f"תנודתיות בינונית ({atr_pct:.1f}%)")
@@ -6721,7 +6864,7 @@ with st.container(key="tabbody_watchlist"):
             wl_rows = []
             for sym_wl in st.session_state.watchlist:
                 try:
-                    df_wl  = load_ohlcv(sym_wl, "3M", "1d")
+                    df_wl  = load_ohlcv(sym_wl, "3mo", "1d")
                     inf_wl = load_info(sym_wl)
                     if df_wl is None or len(df_wl) < 5: continue
 
