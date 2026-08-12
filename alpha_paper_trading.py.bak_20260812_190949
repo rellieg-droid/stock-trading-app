@@ -931,6 +931,71 @@ def _vix_badge_html() -> str:
     )
 
 
+def true_atr(df, period: int = 14) -> float | None:
+    """
+    ATR אמיתי בשיטת Wilder.
+    True Range = המקסימום מבין:
+        High - Low
+        |High - Close הקודם|
+        |Low  - Close הקודם|
+    בניגוד ל-(High-Low) בלבד, זה תופס גאפים בין סגירה לפתיחה.
+    """
+    try:
+        if df is None or len(df) < period + 1:
+            return None
+        h = df["High"].astype(float)
+        l = df["Low"].astype(float)
+        c = df["Close"].astype(float)
+        pc = c.shift(1)
+        tr = pd.concat([h - l, (h - pc).abs(), (l - pc).abs()], axis=1).max(axis=1)
+        # החלקת Wilder = ewm עם alpha=1/period
+        atr = tr.ewm(alpha=1 / period, adjust=False).mean().iloc[-1]
+        if pd.isna(atr):
+            return None
+        return float(atr)
+    except Exception:
+        return None
+
+
+def atr_percent(symbol: str) -> float | None:
+    """
+    ATR באחוזים מהמחיר, על נתונים יומיים.
+    מכוון תמיד ל-3M/1d כדי שהמספר לא ישתנה בכל החלפת טיימפריים בגרף.
+    """
+    try:
+        d = load_ohlcv(symbol, "3mo", "1d")
+        if d is None or d.empty:
+            return None
+        a = true_atr(d)
+        if a is None:
+            return None
+        last = float(d["Close"].iloc[-1])
+        if last <= 0:
+            return None
+        return a / last * 100
+    except Exception:
+        return None
+
+
+def _atr_badge_html(symbol: str) -> str:
+    """באדג' ATR%. מחרוזת ריקה אם אין נתון."""
+    p = atr_percent(symbol)
+    if p is None:
+        return ""
+    if p > 4:
+        clr, label = "#F5454F", "תנודתיות גבוהה"
+    elif p > 2:
+        clr, label = "#E8B84B", "תנודתיות בינונית"
+    else:
+        clr, label = "#2BD46B", "תנודתיות נמוכה"
+    return (
+        f'<span title="ATR יומי כאחוז מהמחיר. התנועה היומית הטיפוסית של המניה." '
+        f'style="background:{clr}1f;color:{clr};border:1px solid {clr}44;'
+        f'border-radius:10px;padding:4px 10px;font-size:.72rem;font-weight:600;'
+        f'white-space:nowrap;">ATR {p:.1f}% · {label}</span>'
+    )
+
+
 @st.cache_data(ttl=3600)
 def load_quarterly(symbol: str) -> list | None:
     try:
@@ -1031,6 +1096,109 @@ def load_analyst_data(symbol: str) -> dict:
         return {}
 
 
+@st.cache_data(ttl=3600)
+def analyst_breakdown(symbol: str) -> dict | None:
+    """
+    פירוק המלצות אנליסטים לקטגוריות.
+    מחזיר {"strong_buy":int,"buy":int,"hold":int,"sell":int,
+           "strong_sell":int,"total":int} או None אם אין נתון.
+
+    yfinance החליפה את מבנה recommendations בין גרסאות, ולכן
+    מטופלות שתי הצורות.
+    """
+    try:
+        rec = yf.Ticker(symbol).recommendations
+        if rec is None or len(rec) == 0:
+            return None
+
+        cols = {str(c).lower().replace(" ", "").replace("_", ""): c
+                for c in rec.columns}
+
+        # ── צורה חדשה: עמודות מונים ──
+        if "strongbuy" in cols or "buy" in cols:
+            row = rec.iloc[0]
+            def g(key):
+                c = cols.get(key)
+                if c is None:
+                    return 0
+                try:
+                    v = row[c]
+                    return int(v) if pd.notna(v) else 0
+                except Exception:
+                    return 0
+            out = {
+                "strong_buy":  g("strongbuy"),
+                "buy":         g("buy"),
+                "hold":        g("hold"),
+                "sell":        g("sell"),
+                "strong_sell": g("strongsell"),
+            }
+            out["total"] = sum(out.values())
+            return out if out["total"] > 0 else None
+
+        # ── צורה ישנה: היסטוריית שינויים, סופרים To Grade ──
+        grade_col = cols.get("tograde") or cols.get("grade")
+        if grade_col is None:
+            return None
+        out = {"strong_buy": 0, "buy": 0, "hold": 0,
+               "sell": 0, "strong_sell": 0}
+        for g_ in rec[grade_col].tail(40).astype(str):
+            t = g_.lower().strip()
+            if "strong buy" in t:
+                out["strong_buy"] += 1
+            elif "strong sell" in t:
+                out["strong_sell"] += 1
+            elif any(k in t for k in ("buy", "outperform", "overweight")):
+                out["buy"] += 1
+            elif any(k in t for k in ("hold", "neutral", "equal")):
+                out["hold"] += 1
+            elif any(k in t for k in ("sell", "underperform", "underweight")):
+                out["sell"] += 1
+        out["total"] = sum(out.values())
+        return out if out["total"] > 0 else None
+    except Exception:
+        return None
+
+
+def _breakdown_html(symbol: str) -> str:
+    """
+    בר מקובץ + מקרא לפירוק ההמלצות.
+    מחרוזת ריקה אם אין נתון, כדי לא להציג אזור ריק.
+    """
+    b = analyst_breakdown(symbol)
+    if not b:
+        return ""
+    total = b["total"]
+    segs = [
+        ("Strong Buy",  b["strong_buy"],  "#2ea043"),
+        ("Buy",         b["buy"],         "#3fb950"),
+        ("Hold",        b["hold"],        "#d29922"),
+        ("Sell",        b["sell"],        "#f85149"),
+        ("Strong Sell", b["strong_sell"], "#da3633"),
+    ]
+    bar = "".join(
+        f'<div title="{lb}: {v}" style="width:{v/total*100:.1f}%;'
+        f'background:{c};height:100%;"></div>'
+        for lb, v, c in segs if v > 0
+    )
+    legend = "".join(
+        f'<span style="display:inline-flex;align-items:center;gap:4px;'
+        f'margin-left:12px;font-size:.66rem;color:#8b949e;white-space:nowrap;">'
+        f'<span style="width:8px;height:8px;border-radius:2px;'
+        f'background:{c};display:inline-block;"></span>{lb} {v}</span>'
+        for lb, v, c in segs if v > 0
+    )
+    return (
+        f'<div style="margin-top:14px;direction:rtl;">'
+        f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;'
+        f'margin-bottom:6px;">פילוח המלצות ({total} אנליסטים)</div>'
+        f'<div style="display:flex;height:10px;border-radius:5px;'
+        f'overflow:hidden;background:#21262d;direction:ltr;">{bar}</div>'
+        f'<div style="margin-top:7px;">{legend}</div>'
+        f'</div>'
+    )
+
+
 def render_analyst_snapshot(symbol: str, cur_price: float, ccy_s: str):
     """כרטיס Analyst Snapshot - קונצנזוס, מחירי יעד, תחזיות"""
     with st.spinner("טוען נתוני אנליסטים..."):
@@ -1044,6 +1212,8 @@ def render_analyst_snapshot(symbol: str, cur_price: float, ccy_s: str):
             unsafe_allow_html=True
         )
         return
+
+    _bd_html = _breakdown_html(symbol)
 
     rating = d["rating"]; rc = d["rc"]; ri = d["ri"]
     n      = d["n"];      tm = d["tm"]; th = d["th"]; tl = d["tl"]
@@ -1144,6 +1314,8 @@ def render_analyst_snapshot(symbol: str, cur_price: float, ccy_s: str):
       {last_html}
     </div>
   </div>
+
+  {_bd_html}
 
   <div style="color:#8b949e;font-size:.63rem;margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">
     ⚠️ נתוני אנליסטים הם הערכות בלבד ואינם מהווים ייעוץ השקעות.
@@ -2143,6 +2315,7 @@ st.markdown(
     f'<span style="color:var(--c-text-3);font-size:.75rem;">היום</span>'
     + _earnings_badge_html(ticker)
     + _vix_badge_html()
+    + _atr_badge_html(ticker)
     + (f'<span style="color:var(--c-text-3);font-size:.72rem;margin-right:auto;">52ש׳: {sym}{w52l:.2f} – {sym}{w52h:.2f}</span>' if w52l and w52h else '')
     + (f'<span style="color:var(--c-text-3);font-size:.72rem;">סגירה קודמת: {sym}{prev_c:.2f}</span>' if prev_c else '')
     + f'</div></div>',
@@ -2511,7 +2684,7 @@ with st.container(key="tabbody_home"):
             _wl_rows3 = []
             for _ws3 in _wl3[:8]:
                 _wp3 = get_live_price(_ws3)
-                _wd3 = load_ohlcv(_ws3,"5D","1d")
+                _wd3 = load_ohlcv(_ws3,"5d","1d")
                 _wc3 = 0
                 if _wp3 and _wd3 is not None and len(_wd3)>=2:
                     _wc3 = (_wp3-float(_wd3["Close"].iloc[-2]))/float(_wd3["Close"].iloc[-2])*100
@@ -2527,7 +2700,7 @@ with st.container(key="tabbody_home"):
 
     with _b1:
         try:
-            _df_v = load_ohlcv(ticker,"5D","1h") if ticker else None
+            _df_v = load_ohlcv(ticker,"5d","1h") if ticker else None
             if _df_v is not None and "Volume" in _df_v.columns and len(_df_v)>0:
                 _vv = _df_v["Volume"].astype(float).tail(14)
                 _mx_v = float(_vv.max()) if len(_vv)>0 else 1
@@ -4342,10 +4515,9 @@ with st.container(key="tabbody_chart"):
 
         # Volatility (ATR proxy)
         if len(df) >= 14:
-            hi = df['High'].astype(float); lo = df['Low'].astype(float)
             cl = df['Close'].astype(float)
-            atr = (hi - lo).rolling(14).mean().iloc[-1]
-            atr_pct = atr / cl.iloc[-1] * 100
+            _a = true_atr(df)
+            atr_pct = (_a / cl.iloc[-1] * 100) if _a else 0.0
             max_pts += 30
             if atr_pct > 4:    risk_pts += 30; factors.append(f"תנודתיות גבוהה (ATR {atr_pct:.1f}%)")
             elif atr_pct > 2:  risk_pts += 15; factors.append(f"תנודתיות בינונית ({atr_pct:.1f}%)")
@@ -6799,7 +6971,7 @@ with st.container(key="tabbody_watchlist"):
             wl_rows = []
             for sym_wl in st.session_state.watchlist:
                 try:
-                    df_wl  = load_ohlcv(sym_wl, "3M", "1d")
+                    df_wl  = load_ohlcv(sym_wl, "3mo", "1d")
                     inf_wl = load_info(sym_wl)
                     if df_wl is None or len(df_wl) < 5: continue
 

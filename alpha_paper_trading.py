@@ -1191,7 +1191,7 @@ def _breakdown_html(symbol: str) -> str:
     return (
         f'<div style="margin-top:14px;direction:rtl;">'
         f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;'
-        f'margin-bottom:6px;">פילוח המלצות ({total} אנליסטים)</div>'
+        f'margin-bottom:6px;">פילוח המלצות</div>'
         f'<div style="display:flex;height:10px;border-radius:5px;'
         f'overflow:hidden;background:#21262d;direction:ltr;">{bar}</div>'
         f'<div style="margin-top:7px;">{legend}</div>'
@@ -2353,7 +2353,24 @@ st.markdown("""
     background: var(--c-blue-dim) !important; border-radius: 50% !important;
     color: var(--c-blue) !important; width: 42px !important; margin: 0 auto !important;
 }
+/* PILL_IFRAME_FIX — הכלל הקודם כיוון ל-nav שנמצא בתוך iframe
+   ולכן לא יכול היה לעבוד. כאן מכוונים לאלמנט ה-iframe עצמו
+   בעמוד ההורה, ומעבירים את הרקע והמסגרת לעטיפה החיצונית. */
 .top-pill-wrap nav[role="tablist"] { background: transparent !important; }
+
+iframe[title^="streamlit_option_menu"] {
+    background: transparent !important;
+    color-scheme: dark;
+}
+.top-pill-wrap {
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    padding: 2px 4px;
+    margin: 0 0 0.9rem 0;
+    overflow: hidden;
+}
+.top-pill-wrap iframe { display: block; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -2382,9 +2399,9 @@ def render_top_pill(active_group):
         menu_title=None, options=subs, default_index=default_idx,
         orientation="horizontal",
         styles={
-            "container": {"padding": "4px", "background-color": "rgba(255,255,255,0.035)",
-                          "border": "1px solid rgba(255,255,255,0.08)", "border-radius": "999px",
-                          "margin": "0 0 0.9rem 0"},
+            "container": {"padding": "0px", "background-color": "transparent",
+                          "border": "none", "border-radius": "999px",
+                          "margin": "0px"},
             "nav-link": {"font-size": "11px", "font-weight": "600", "color": "#5A6178",
                         "text-align": "center", "border-radius": "999px", "padding": "8px 6px", "margin": "0px"},
             "nav-link-selected": {"background-color": "#4D7FFF", "color": "#FFFFFF"},
@@ -6895,7 +6912,7 @@ with st.container(key="tabbody_reports"):
         for i, r in enumerate(ec_rows):
             bg = "#161b22" if i%2==0 else "#0d1117"
             days = r["days_left"]
-            if days <= 7:    dc = "#f85149"; dtxt = f"⚠️ {days} ימים"
+            if days <= 14:   dc = "#f85149"; dtxt = f"⚠️ {days} ימים"
             elif days <= 30: dc = "#d29922"; dtxt = f"📅 {days} ימים"
             elif days == 9999: dc = "#8b949e"; dtxt = "—"
             else:             dc = "#8b949e";  dtxt = f"{days} ימים"
