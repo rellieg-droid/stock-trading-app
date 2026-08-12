@@ -1183,8 +1183,8 @@ def _breakdown_html(symbol: str) -> str:
     )
     legend = "".join(
         f'<span style="display:inline-flex;align-items:center;gap:4px;'
-        f'margin-left:12px;font-size:.66rem;color:#8b949e;white-space:nowrap;">'
-        f'<span style="width:8px;height:8px;border-radius:2px;'
+        f'margin-left:16px;font-size:.76rem;color:#8b949e;white-space:nowrap;">'
+        f'<span style="width:11px;height:11px;border-radius:3px;'
         f'background:{c};display:inline-block;"></span>{lb} {v}</span>'
         for lb, v, c in segs if v > 0
     )
@@ -1192,7 +1192,7 @@ def _breakdown_html(symbol: str) -> str:
         f'<div style="margin-top:14px;direction:rtl;">'
         f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;'
         f'margin-bottom:6px;">פילוח המלצות</div>'
-        f'<div style="display:flex;height:10px;border-radius:5px;'
+        f'<div style="display:flex;height:14px;border-radius:7px;'
         f'overflow:hidden;background:#21262d;direction:ltr;">{bar}</div>'
         f'<div style="margin-top:7px;">{legend}</div>'
         f'</div>'
@@ -1837,9 +1837,7 @@ def build_thesis_data(symbol: str, info: dict, df) -> dict:
 
         if t_mean and lc_ > 0:
             upside = (float(t_mean) - lc_) / lc_ * 100
-            if upside > 20:
-                alerts.append({"level": "low", "text": f"אפסייד של {upside:.0f}% לפי קונצנזוס אנליסטים"})
-            elif upside < -10:
+            if upside < -10:
                 alerts.append({"level": "medium", "text": f"דאונסייד של {abs(upside):.0f}% לפי קונצנזוס — מחיר גבוה מהיעד"})
 
         if not alerts:
@@ -2312,12 +2310,12 @@ st.markdown(
     f'<span style="background:{chg_c}1f;color:{chg_c};border:1px solid {chg_c}44;'
     f'border-radius:10px;padding:4px 12px;font-size:.92rem;font-weight:700;">'
     f'{chg_a} {sym}{abs(da):.2f} ({dc:+.2f}%)</span>'
-    f'<span style="color:var(--c-text-3);font-size:.75rem;">היום</span>'
+    f'<span style="color:var(--c-text-2);font-size:.8rem;">היום</span>'
     + _earnings_badge_html(ticker)
     + _vix_badge_html()
     + _atr_badge_html(ticker)
-    + (f'<span style="color:var(--c-text-3);font-size:.72rem;margin-right:auto;">52ש׳: {sym}{w52l:.2f} – {sym}{w52h:.2f}</span>' if w52l and w52h else '')
-    + (f'<span style="color:var(--c-text-3);font-size:.72rem;">סגירה קודמת: {sym}{prev_c:.2f}</span>' if prev_c else '')
+    + (f'<span style="color:var(--c-text-2);font-size:.78rem;margin-right:auto;">52ש׳: {sym}{w52l:.2f} – {sym}{w52h:.2f}</span>' if w52l and w52h else '')
+    + (f'<span style="color:var(--c-text-2);font-size:.78rem;">סגירה קודמת: {sym}{prev_c:.2f}</span>' if prev_c else '')
     + f'</div></div>',
     unsafe_allow_html=True
 )
@@ -3250,7 +3248,7 @@ with st.container(key="tabbody_chart"):
             'gap:10px;flex-wrap:wrap;direction:rtl;">'
             '<span style="color:#bc8cff;font-size:.75rem;font-weight:700;">📐 RSI</span>'
             f'<span style="color:{rsi_clr};font-size:.78rem;">{rsi_txt}</span>'
-            '<span style="color:#8b949e;font-size:.65rem;margin-right:auto;">'
+            '<span style="color:#8b949e;font-size:.74rem;margin-right:auto;">'
             '0–30 = מכור מדי · 70–100 = קנוי מדי · 50 = נייטרלי'
             '</span>'
             '</div>',
@@ -3987,9 +3985,7 @@ with st.container(key="tabbody_chart"):
                 alerts.append({"level":"medium","icon":"💡","text":f"RSI {rsi_val:.0f} — מכור מדי. ייתכן bounce"})
             if vol_ratio and vol_ratio >= 2.0:
                 alerts.append({"level":"medium","icon":"📊","text":f"נפח חריג — פי {vol_ratio:.1f} מהממוצע. קרה משהו משמעותי"})
-            if upside and upside > 25:
-                alerts.append({"level":"low","icon":"🎯","text":f"אפסייד גבוה — {upside:.0f}% לפי קונצנזוס אנליסטים"})
-            elif upside and upside < -10:
+            if upside and upside < -10:
                 alerts.append({"level":"high","icon":"📉","text":f"דאונסייד — המחיר גבוה מיעד האנליסטים ב-{abs(upside):.0f}%"})
             if bb_pos and bb_pos > 0.95:
                 alerts.append({"level":"medium","icon":"🔴","text":"מחיר בשולי הרצועה העליונה של Bollinger — תנודתיות קיצונית"})

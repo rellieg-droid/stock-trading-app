@@ -5,3 +5,4 @@ __pycache__/
 paper_portfolio.json
 .streamlit/secrets.toml
 .streamlit/secrets.toml.txt
+*.bak_*
