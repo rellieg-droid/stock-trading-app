@@ -856,82 +856,6 @@ def load_info(symbol: str) -> dict:
         return {}
 
 @st.cache_data(ttl=3600)
-def next_earnings(symbol: str) -> tuple[str, int] | None:
-    """
-    מחזיר (תאריך בפורמט dd/mm/yyyy, ימים עד הדוח) או None אם אין נתון.
-    ימים שליליים = הדוח כבר היה ויאהו טרם עדכנה.
-    """
-    try:
-        inf = load_info(symbol)
-        ned = inf.get("earningsDate") or inf.get("earningsTimestamp")
-        if isinstance(ned, (list, tuple)):
-            ned = ned[0] if ned else None
-        if not ned:
-            return None
-        if isinstance(ned, (int, float)):
-            ned_dt = datetime.fromtimestamp(ned)
-        else:
-            ned_dt = pd.Timestamp(ned).to_pydatetime()
-        days = (ned_dt.date() - datetime.now().date()).days
-        return ned_dt.strftime("%d/%m/%Y"), days
-    except Exception:
-        return None
-
-
-@st.cache_data(ttl=300)
-def load_vix() -> float | None:
-    """ערך VIX הנוכחי. None אם השליפה נכשלה."""
-    try:
-        h = yf.Ticker("^VIX").history(period="5d", interval="1d")
-        if h is None or h.empty:
-            return None
-        return float(h["Close"].iloc[-1])
-    except Exception:
-        return None
-
-
-def _earnings_badge_html(symbol: str) -> str:
-    """באדג' דוח הבא. מחרוזת ריקה אם אין נתון — עדיף כלום מ'לא ידוע'."""
-    res = next_earnings(symbol)
-    if not res:
-        return ""
-    date_str, days = res
-    if days < 0:
-        return ""
-    if days <= 14:
-        clr, icon, label = "#F5454F", "⚠️", f"דוח בעוד {days} ימים"
-    elif days <= 30:
-        clr, icon, label = "#E8B84B", "📅", f"דוח בעוד {days} ימים"
-    else:
-        clr, icon, label = "#8B93A7", "📅", f"דוח: {date_str}"
-    return (
-        f'<span title="תאריך הדוח הבא: {date_str}" '
-        f'style="background:{clr}1f;color:{clr};border:1px solid {clr}44;'
-        f'border-radius:10px;padding:4px 10px;font-size:.72rem;font-weight:600;'
-        f'white-space:nowrap;">{icon} {label}</span>'
-    )
-
-
-def _vix_badge_html() -> str:
-    """באדג' VIX בשלוש רמות. מחרוזת ריקה אם השליפה נכשלה."""
-    v = load_vix()
-    if v is None:
-        return ""
-    if v < 20:
-        clr, label = "#2BD46B", "שוק רגוע"
-    elif v <= 25:
-        clr, label = "#E8B84B", "תנודתיות בינונית"
-    else:
-        clr, label = "#F5454F", "שוק תנודתי"
-    return (
-        f'<span title="מדד התנודתיות VIX. מתחת ל-20 רגוע, מעל 25 תנודתי." '
-        f'style="background:{clr}1f;color:{clr};border:1px solid {clr}44;'
-        f'border-radius:10px;padding:4px 10px;font-size:.72rem;font-weight:600;'
-        f'white-space:nowrap;">VIX {v:.1f} · {label}</span>'
-    )
-
-
-@st.cache_data(ttl=3600)
 def load_quarterly(symbol: str) -> list | None:
     try:
         qf = yf.Ticker(symbol).quarterly_financials
@@ -2141,8 +2065,6 @@ st.markdown(
     f'border-radius:10px;padding:4px 12px;font-size:.92rem;font-weight:700;">'
     f'{chg_a} {sym}{abs(da):.2f} ({dc:+.2f}%)</span>'
     f'<span style="color:var(--c-text-3);font-size:.75rem;">היום</span>'
-    + _earnings_badge_html(ticker)
-    + _vix_badge_html()
     + (f'<span style="color:var(--c-text-3);font-size:.72rem;margin-right:auto;">52ש׳: {sym}{w52l:.2f} – {sym}{w52h:.2f}</span>' if w52l and w52h else '')
     + (f'<span style="color:var(--c-text-3);font-size:.72rem;">סגירה קודמת: {sym}{prev_c:.2f}</span>' if prev_c else '')
     + f'</div></div>',
