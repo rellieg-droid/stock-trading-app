@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 import json, os, requests
 from streamlit_autorefresh import st_autorefresh
 from streamlit_option_menu import option_menu
-from streamlit_searchbox import st_searchbox
 
 # ── Anthropic API Key ──
 # אפשרות 1: קובץ .streamlit/secrets.toml  → ANTHROPIC_API_KEY = "sk-ant-..."
@@ -2269,6 +2268,23 @@ with _h_col_search:
         except: pass
         return []
 
+    _s_in = st.text_input(
+        "search_header", value="",
+        placeholder="🔍  סימול או שם חברה — AAPL, Tesla, טבע...",
+        label_visibility="collapsed", key="header_search"
+    )
+
+    sb1, sb2 = st.columns(2)
+    _do_search  = sb1.button("🔍 חפשי", key="header_search_btn", use_container_width=True)
+    _do_direct  = sb2.button("▶ ישירות", key="header_go", type="primary", use_container_width=True)
+
+    def _try_ticker(sym_try):
+        try:
+            h = yf.Ticker(sym_try).history(period="1mo")
+            return not h.empty
+        except:
+            return False
+
     def _set_ticker(sym_found):
         st.session_state.ticker         = sym_found
         st.session_state.err            = ""
@@ -2281,47 +2297,50 @@ with _h_col_search:
         save_user_data()
         st.rerun()
 
-    def _header_search(term: str):
-        """
-        מוחזר (תווית להצגה, סימול). מתחת ל-2 תווים לא פונים ל-API בכלל,
-        אחרת כל הקשה בודדת מייצרת בקשה מיותרת.
-        """
-        term = (term or "").strip()
-        if len(term) < 2:
-            return []
+    # ── Direct mode: resolve + try ──
+    if _do_direct and _s_in.strip():
+        _r = resolve(_s_in.strip())
+        _candidates = [_r]
+        if not _r.endswith(".TA"): _candidates.append(_r + ".TA")
+        else: _candidates.append(_r.replace(".TA",""))
+        _found = next((c for c in _candidates if _try_ticker(c)), None)
+        if _found:
+            _set_ticker(_found)
+        else:
+            st.session_state.search_results = yahoo_search(_s_in.strip())
+            if not st.session_state.search_results:
+                st.error(f"'{_r}' לא נמצא")
 
-        opts, seen = [], set()
+    # ── Search mode: Yahoo search ──
+    if _do_search and _s_in.strip():
+        st.session_state.search_results = yahoo_search(_s_in.strip())
+        st.session_state.search_query   = _s_in.strip()
+        if not st.session_state.search_results:
+            st.warning("לא נמצאו תוצאות")
 
-        # הצעה ישירה: resolve מטפל גם בשמות בעברית וגם בסימולים ישראליים
-        try:
-            _direct = resolve(term)
-        except Exception:
-            _direct = None
-        if _direct:
-            opts.append((f"▶  {_direct}", _direct))
-            seen.add(_direct.upper())
-
-        for _r in yahoo_search(term):
-            _sy = _r["sym"]
-            if _sy.upper() in seen:
-                continue
-            seen.add(_sy.upper())
-            _nm = _r["name"][:34]
-            opts.append((f'{_sy}  ·  {_nm}  ·  {_r["exch"]}', _sy))
-
-        return opts
-
-    _picked = st_searchbox(
-        _header_search,
-        placeholder="🔍  סימול או שם חברה — AAPL, Tesla, טבע...",
-        key="header_sb",
-        debounce=250,
-        clear_on_submit=False,
-    )
-
-    # ההשוואה לטיקר הנוכחי היא מה שמונע לולאת rerun אינסופית
-    if _picked and _picked != st.session_state.ticker:
-        _set_ticker(_picked)
+    # ── Show search results ──
+    if st.session_state.search_results:
+        st.markdown(
+            '<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;'
+            'overflow:hidden;margin-top:4px;">',
+            unsafe_allow_html=True
+        )
+        for _res in st.session_state.search_results:
+            _clr_exch = "#388bfd" if "TLV" in _res["exch"] or "TA" in _res["exch"] else "#8b949e"
+            st.markdown(
+                f'<div style="padding:8px 12px;border-bottom:1px solid #21262d;direction:rtl;">'
+                f'<span style="font-weight:700;color:#388bfd;font-size:.82rem;">{_res["sym"]}</span>'
+                f'<span style="color:#c9d1d9;font-size:.75rem;margin-right:7px;">{_res["name"][:30]}</span>'
+                f'<span style="color:{_clr_exch};font-size:.65rem;float:left;">{_res["exch"]}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            if st.button(f"▶ {_res['sym']}", key=f"res_{_res['sym']}", use_container_width=True):
+                _set_ticker(_res["sym"])
+        st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("✕ סגור", key="close_results"):
+            st.session_state.search_results = []
+            st.rerun()
 
 
 # Price + change line — Premium glass hero card
