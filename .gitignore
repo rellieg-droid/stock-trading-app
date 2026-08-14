@@ -6,3 +6,5 @@ paper_portfolio.json
 .streamlit/secrets.toml
 .streamlit/secrets.toml.txt
 *.bak_*
+
+*.bak
