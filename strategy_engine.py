@@ -16,7 +16,7 @@ strategy_engine.py
     לכן המנוע מחשב HV Rank (אחוזון תנודתיות ממומשת) ומסמן אותו
     כפרוקסי (is_proxy=True). ה-UI חייב להציג את התווית הזו.
 
-__version__: 0.1.0
+__version__: 0.4.0
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
 
 TRADING_DAYS = 252
 
@@ -44,8 +44,10 @@ class StrategyConfig:
     risk_profile: str = "medium"          # low | medium | high
 
     # שלב 1 — תנודתיות יחסית ומרחק נשימה
-    max_relative_std: float = 1.5         # פי כמה מהמדד מותר
+    max_relative_std: float = 1.5         # fallback בלבד, כשאין דירוג
     high_risk_relative_std: float = 2.0   # מעל זה = סיכון גבוה מוצהר
+    rel_vol_rank_pass_max: float = 60.0   # אחוזון התנודתיות היחסית מול עצמה
+    rel_vol_rank_calm: float = 25.0       # מתחת לזה = שקטה מהרגיל
     atr_stop_multiplier: float = 2.0      # מרחק נשימה ל-Stop Loss
     atr_period: int = 14
 
@@ -56,6 +58,7 @@ class StrategyConfig:
     hv_rank_pass_max: float = 50.0        # מעל זה = כישלון קריטריון
     hv_rank_stretched: float = 70.0       # מעל זה = מתוח
     iv_hv_ratio_rich: float = 1.30        # IV גבוה מ-HV ביותר מ-30% = יקר
+    iv_hv_ratio_cheap: float = 0.85       # IV נמוך מהתנודתיות בפועל = השוק מפגר
 
     # שלב 3 — מאקרו
     vix_calm: float = 15.0
@@ -64,6 +67,7 @@ class StrategyConfig:
 
     # שלב 3ב — לוח אירועים
     earnings_blackout_days: int = 7       # וטו אם דוח קרוב מזה
+    earnings_horizon_days: int = 35       # אופק עסקה טיפוסי. דוח בתוכו = אזהרה, לא כישלון
 
     # ניהול סיכון
     max_risk_pct: float = 0.01            # כלל ה-1% על התיק
@@ -76,6 +80,7 @@ class StrategyConfig:
             return cls(
                 risk_profile="low",
                 max_relative_std=1.2,
+                rel_vol_rank_pass_max=40.0,
                 atr_stop_multiplier=2.5,
                 hv_rank_pass_max=35.0,
                 vix_max=18.0,
@@ -85,6 +90,7 @@ class StrategyConfig:
             return cls(
                 risk_profile="high",
                 max_relative_std=2.5,
+                rel_vol_rank_pass_max=80.0,
                 atr_stop_multiplier=1.5,
                 hv_rank_pass_max=70.0,
                 vix_max=30.0,
@@ -237,6 +243,63 @@ def relative_std(stock_closes, benchmark_closes, window: int = TRADING_DAYS) -> 
     return float(s / b)
 
 
+def rolling_relative_vol(stock_closes, benchmark_closes,
+                         window: int = 21) -> pd.Series:
+    """סדרת היחס בין תנודתיות המניה לתנודתיות המדד, יום אחר יום."""
+    s = rolling_hv(stock_closes, window)
+    b = rolling_hv(benchmark_closes, window)
+    joined = pd.concat([s, b], axis=1, join="inner").dropna()
+    if joined.empty:
+        return pd.Series(dtype="float64")
+    ratio = joined.iloc[:, 0] / joined.iloc[:, 1].replace(0.0, np.nan)
+    return ratio.replace([np.inf, -np.inf], np.nan).dropna()
+
+
+def _percentile_of_last(series: pd.Series, lookback: int) -> float:
+    """כמה אחוז מהתצפיות בחלון היו נמוכות מהתצפית האחרונה."""
+    s = series.dropna()
+    if len(s) < 2:
+        return float("nan")
+    hist = s.tail(lookback)
+    current = float(hist.iloc[-1])
+    if not math.isfinite(current):
+        return float("nan")
+    return float((hist < current).sum() / len(hist) * 100.0)
+
+
+def hv_percentile(closes, window: int = 21, lookback: int = TRADING_DAYS) -> float:
+    """
+    אחוזון עמיד לחריגים. בניגוד ל-hv_rank שנשען על שני ערכי קצה בלבד,
+    כאן יום אחד חריג בשנה לא מעוות את כל הסולם.
+    """
+    return _percentile_of_last(rolling_hv(closes, window), lookback)
+
+
+def relative_vol_percentile(stock_closes, benchmark_closes, window: int = 21,
+                            lookback: int = TRADING_DAYS) -> float:
+    return _percentile_of_last(
+        rolling_relative_vol(stock_closes, benchmark_closes, window), lookback)
+
+
+def relative_vol_rank(stock_closes, benchmark_closes, window: int = 21,
+                      lookback: int = TRADING_DAYS) -> float:
+    """
+    אחוזון התנודתיות היחסית בתוך הטווח השנתי של עצמה.
+
+    זה ההבדל בין "האם זו מניית צמיחה" לבין "האם המניה סוערת מהרגיל".
+    מניה שתמיד פי 3 מהמדד תקבל דירוג נמוך כשהיא פי 2.9,
+    ודירוג גבוה כשהיא פי 4.2. סיגנל תזמון, לא סיווג.
+    """
+    ratio = rolling_relative_vol(stock_closes, benchmark_closes, window)
+    if len(ratio) < 2:
+        return float("nan")
+    hist = ratio.tail(lookback)
+    current, lo, hi = float(hist.iloc[-1]), float(hist.min()), float(hist.max())
+    if not math.isfinite(current) or hi <= lo:
+        return float("nan")
+    return float((current - lo) / (hi - lo) * 100.0)
+
+
 # ---------------------------------------------------------------------------
 # 4. בוני קריטריונים
 # ---------------------------------------------------------------------------
@@ -248,60 +311,105 @@ def _fmt(x: Optional[float], suffix: str = "", digits: int = 2) -> str:
 
 
 def build_atr_criterion(price: float, atr: float, rel_std: Optional[float],
-                        cfg: StrategyConfig) -> Criterion:
+                        cfg: StrategyConfig,
+                        rel_std_rank: Optional[float] = None,
+                        rel_std_pct: Optional[float] = None) -> Criterion:
+    """
+    שלב 1. הקריטריון נשען על הדירוג כשהוא קיים, ונופל חזרה
+    להשוואה מוחלטת מול המדד רק כשאין מספיק היסטוריה לדירוג.
+    """
     atr_pct = (atr / price * 100.0) if (price and math.isfinite(atr)) else float("nan")
-    passed = None
-    if rel_std is not None and math.isfinite(rel_std):
-        passed = rel_std <= cfg.max_relative_std
+    has_pct = rel_std_pct is not None and math.isfinite(rel_std_pct)
+    metric = rel_std_pct if has_pct else rel_std_rank
+    has_rank = metric is not None and math.isfinite(metric)
+    has_abs = rel_std is not None and math.isfinite(rel_std)
 
-    if rel_std is None or not math.isfinite(rel_std):
-        meaning = "אין נתוני מדד ייחוס. אי אפשר לדעת אם התנודתיות חריגה או נורמלית."
-    elif rel_std >= cfg.high_risk_relative_std:
-        meaning = (f"תנודתית פי {rel_std:.1f} מה-S&P. סיכון גבוה מוצהר: "
-                   f"תנועה יומית של {_fmt(atr_pct, '%')} היא רעש, לא סיגנל.")
-    elif passed:
-        meaning = (f"התנודתיות בטווח הסביר. Stop Loss צריך מרחק נשימה של "
-                   f"{cfg.atr_stop_multiplier:.1f}×ATR כדי לא להיסגר על רעש.")
+    if has_rank:
+        passed = metric <= cfg.rel_vol_rank_pass_max
+    elif has_abs:
+        passed = rel_std <= cfg.max_relative_std
     else:
-        meaning = (f"מעל הסף שהגדרת לפרופיל {cfg.risk_profile}. "
-                   f"הפוזיציה תזוז חזק יותר מהתיק שסביבה.")
+        passed = None
+
+    parts = []
+    if has_abs:
+        parts.append(f"פי {rel_std:.2f} מהמדד")
+    if rel_std_rank is not None and math.isfinite(rel_std_rank):
+        parts.append(f"דירוג {rel_std_rank:.0f}%")
+    if has_pct:
+        parts.append(f"אחוזון {rel_std_pct:.0f}%")
+    if math.isfinite(atr_pct):
+        parts.append(f"ATR {atr_pct:.2f}%")
+    current = " | ".join(parts) if parts else "אין נתון"
+
+    if passed is None:
+        meaning = "אין נתוני מדד ייחוס. אי אפשר לדעת אם התנודתיות חריגה או נורמלית."
+    elif has_rank and metric <= cfg.rel_vol_rank_calm:
+        meaning = ("המניה שקטה מהרגיל ביחס למדד, בתחתית הטווח השנתי שלה. "
+                   "התנועות כרגע קטנות בשבילה.")
+    elif has_rank and not passed:
+        meaning = ("המניה סוערת מהרגיל ביחס למדד. משהו קורה שלא קרה ברוב השנה, "
+                   "וכניסה עכשיו נכנסת לתוך הרעש ולא לפניו.")
+    elif has_rank:
+        meaning = "התנודתיות היחסית באזור הנורמלי של המניה עצמה. אין כאן חריגה."
+    elif passed:
+        meaning = "התנודתיות בטווח הסביר מול המדד."
+    else:
+        meaning = f"מעל הסף שהגדרת לפרופיל {cfg.risk_profile}."
+
+    if has_abs and rel_std >= cfg.high_risk_relative_std:
+        meaning += (f" שימי לב: זו מניה תנודתית פי {rel_std:.1f} מהמדד בכל מקרה, "
+                    f"ולכן Stop Loss דורש {cfg.atr_stop_multiplier:.1f}×ATR "
+                    f"({_fmt(atr_pct * cfg.atr_stop_multiplier, '%')}) מרחק נשימה.")
+
+    optimal = ((f"{'אחוזון' if has_pct else 'דירוג'} מתחת ל-"
+                f"{cfg.rel_vol_rank_pass_max:.0f}% מול השנה של המניה")
+               if has_rank else f"עד פי {cfg.max_relative_std:.1f} מה-S&P 500")
 
     return Criterion(
         key="atr",
         label="ATR / תנודתיות יחסית",
-        optimal=f"עד פי {cfg.max_relative_std:.1f} מה-S&P 500",
-        current=f"פי {_fmt(rel_std, '', 2)} | ATR {_fmt(atr_pct, '%')}",
+        optimal=optimal,
+        current=current,
         passed=passed,
         meaning=meaning,
-        value=rel_std,
+        value=metric if has_rank else rel_std,
     )
 
 
 def build_hv_rank_criterion(rank: Optional[float], iv: Optional[float],
-                            hv: Optional[float], cfg: StrategyConfig) -> Criterion:
+                            hv: Optional[float], cfg: StrategyConfig,
+                            pct: Optional[float] = None) -> Criterion:
+    has_pct = pct is not None and math.isfinite(pct)
+    metric = pct if has_pct else rank
     passed = None
-    if rank is not None and math.isfinite(rank):
-        passed = rank <= cfg.hv_rank_pass_max
+    if metric is not None and math.isfinite(metric):
+        passed = metric <= cfg.hv_rank_pass_max
 
     ratio = None
     if iv and hv and math.isfinite(iv) and math.isfinite(hv) and hv > 0:
         ratio = iv / hv
 
     current = f"HV Rank {_fmt(rank, '%', 0)}"
+    if has_pct:
+        current += f" | אחוזון {pct:.0f}%"
     if ratio is not None:
         current += f" | IV/HV {ratio:.2f}"
 
-    if rank is None or not math.isfinite(rank):
+    if metric is None or not math.isfinite(metric):
         meaning = "חסרים נתוני מחיר לשנה. בלי זה אין דירוג תנודתיות."
-    elif rank <= cfg.hv_rank_cheap:
+    elif metric <= cfg.hv_rank_cheap:
         meaning = "שוק רגוע. אם משהו עומד להתפרץ, את נכנסת לפני שהמחיר מגלם את זה."
-    elif rank >= cfg.hv_rank_stretched:
+    elif metric >= cfg.hv_rank_stretched:
         meaning = "התנודתיות באחוזון עליון. רוב החדשות כבר בפנים, את קונה יקר."
     else:
         meaning = "אזור אמצע. לא הזדמנות ולא מלכודת, פשוט אין כאן קצה."
 
     if ratio is not None and ratio >= cfg.iv_hv_ratio_rich:
         meaning += f" השוק מתמחר תנודתיות גבוהה ב-{(ratio - 1) * 100:.0f}% מהמצב בפועל."
+    elif ratio is not None and ratio <= cfg.iv_hv_ratio_cheap:
+        meaning += (f" שוק האופציות מתמחר תנודתיות נמוכה ב-{(1 - ratio) * 100:.0f}% "
+                    f"ממה שקורה בפועל — התמחור מפגר אחרי התנועה.")
 
     return Criterion(
         key="hv_rank",
@@ -310,7 +418,7 @@ def build_hv_rank_criterion(rank: Optional[float], iv: Optional[float],
         current=current,
         passed=passed,
         meaning=meaning,
-        value=rank,
+        value=metric,
         is_proxy=True,
     )
 
@@ -364,6 +472,9 @@ def build_events_criterion(days_to_earnings: Optional[int], macro_event: Optiona
                    "כניסה עכשיו היא הימור על תוצאה, לא על מגמה.")
     elif macro_event:
         meaning = f"אירוע מאקרו בפתח ({macro_event}). השוק יזוז מסיבה שאין לה קשר למניה."
+    elif days_to_earnings is not None and days_to_earnings <= cfg.earnings_horizon_days:
+        meaning = (f"מחוץ לחלון החסימה, אבל הדוח ייפול בתוך עסקה באורך רגיל. "
+                   f"או שיוצאים לפני יום {days_to_earnings}, או שמחזיקים דרך הדוח ביודעין.")
     else:
         meaning = "לוח האירועים נקי. מה שיקרה במחיר יהיה בגלל המניה עצמה."
 
@@ -476,14 +587,17 @@ def evaluate(
     portfolio_value: float = 0.0,
     position_pct: float = 0.05,
     risk_profile: str = "medium",
+    rel_std_rank: Optional[float] = None,
+    rel_std_pct: Optional[float] = None,
+    hv_percentile_value: Optional[float] = None,
     config: Optional[StrategyConfig] = None,
 ) -> StrategyReport:
     """הניתוח המלא. כל 4 השלבים, טבלת סיכום ופסק דין."""
     cfg = config or StrategyConfig.for_profile(risk_profile)
 
     criteria = [
-        build_atr_criterion(price, atr, rel_std, cfg),
-        build_hv_rank_criterion(hv_rank_value, iv, hv, cfg),
+        build_atr_criterion(price, atr, rel_std, cfg, rel_std_rank, rel_std_pct),
+        build_hv_rank_criterion(hv_rank_value, iv, hv, cfg, hv_percentile_value),
         build_vix_criterion(vix, cfg),
         build_events_criterion(days_to_earnings, macro_event, cfg),
     ]

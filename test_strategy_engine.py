@@ -359,3 +359,168 @@ def test_evaluate_missing_data_does_not_crash():
                     hv_rank_value=float("nan"), vix=None,
                     portfolio_value=0, position_pct=0.05)
     assert r.verdict in se.VERDICT_LABELS
+
+
+# --------------------------------------------------------------------------
+# דירוג תנודתיות יחסית (v0.3.0)
+# --------------------------------------------------------------------------
+
+def test_rolling_relative_vol_is_positive_and_aligned():
+    stock = synth_prices(300, daily_vol=0.02, seed=21)
+    bench = synth_prices(300, daily_vol=0.01, seed=22)
+    r = se.rolling_relative_vol(stock, bench)
+    assert len(r) > 200
+    assert (r > 0).all()
+
+
+def test_rolling_relative_vol_centers_on_true_ratio():
+    stock = synth_prices(800, daily_vol=0.02, seed=23)
+    bench = synth_prices(800, daily_vol=0.01, seed=24)
+    assert se.rolling_relative_vol(stock, bench).median() == pytest.approx(2.0, rel=0.25)
+
+
+def test_relative_vol_rank_bounded():
+    rank = se.relative_vol_rank(synth_prices(400, seed=31),
+                                synth_prices(400, seed=32))
+    assert 0.0 <= rank <= 100.0
+
+
+def test_relative_vol_rank_high_when_stock_erupts_alone():
+    bench = zigzag(360, 0.004)
+    calm = zigzag(300, 0.012)
+    storm = zigzag(60, 0.06, start=float(calm.iloc[-1]))
+    stock = pd.concat([calm, storm], ignore_index=True)
+    assert se.relative_vol_rank(stock, bench) > 90
+
+
+def test_relative_vol_rank_low_when_stock_settles():
+    bench = zigzag(360, 0.004)
+    storm = zigzag(300, 0.06)
+    quiet = zigzag(60, 0.005, start=float(storm.iloc[-1]))
+    stock = pd.concat([storm, quiet], ignore_index=True)
+    assert se.relative_vol_rank(stock, bench) < 10
+
+
+def test_relative_vol_rank_nan_on_short_series():
+    assert math.isnan(se.relative_vol_rank([100.0, 101.0], [100.0, 101.0]))
+
+
+# --- הרגרסיה שבגללה שינינו את הקריטריון ---
+
+def test_growth_stock_passes_when_calm_for_itself():
+    """NVDA פי 2.86 מהמדד אבל בדירוג נמוך של עצמה — חייב לעבור."""
+    cfg = se.StrategyConfig.for_profile("medium")
+    c = se.build_atr_criterion(178.0, 5.5, rel_std=2.86, cfg=cfg, rel_std_rank=38.0)
+    assert c.passed is True
+    assert "דירוג 38%" in c.current
+    assert "פי 2.9" in c.meaning  # אזהרת מרחק הנשימה נשארת
+
+
+def test_growth_stock_fails_when_stormy_for_itself():
+    cfg = se.StrategyConfig.for_profile("medium")
+    assert se.build_atr_criterion(178.0, 9.0, 4.1, cfg, rel_std_rank=93.0).passed is False
+
+
+def test_criterion_falls_back_to_absolute_without_rank():
+    cfg = se.StrategyConfig.for_profile("medium")
+    assert se.build_atr_criterion(100, 2, 2.86, cfg, rel_std_rank=None).passed is False
+    assert se.build_atr_criterion(100, 2, 1.1, cfg, rel_std_rank=float("nan")).passed is True
+
+
+def test_criterion_optimal_text_switches_with_mode():
+    cfg = se.StrategyConfig.for_profile("medium")
+    assert "דירוג" in se.build_atr_criterion(100, 2, 2.0, cfg, 40.0).optimal
+    assert "S&P" in se.build_atr_criterion(100, 2, 2.0, cfg, None).optimal
+
+
+def test_calm_rank_gets_its_own_message():
+    cfg = se.StrategyConfig.for_profile("medium")
+    assert "שקטה מהרגיל" in se.build_atr_criterion(100, 2, 1.0, cfg, 12.0).meaning
+
+
+def test_profiles_order_rank_threshold():
+    assert (se.StrategyConfig.for_profile("low").rel_vol_rank_pass_max
+            < se.StrategyConfig.for_profile("medium").rel_vol_rank_pass_max
+            < se.StrategyConfig.for_profile("high").rel_vol_rank_pass_max)
+
+
+def test_evaluate_threads_rank_through():
+    full = _ideal(rel_std=3.0, rel_std_rank=30.0)
+    assert full.verdict == "INVEST"
+    stormy = _ideal(rel_std=3.0, rel_std_rank=95.0)
+    assert stormy.passed_count == full.passed_count - 1
+
+
+def test_hv_rank_criterion_reports_cheap_iv():
+    cfg = se.StrategyConfig.for_profile("medium")
+    c = se.build_hv_rank_criterion(72.0, iv=0.14, hv=0.20, cfg=cfg)
+    assert "IV/HV 0.70" in c.current
+    assert "30%" in c.meaning and "מפגר" in c.meaning
+
+
+def test_hv_rank_criterion_silent_in_neutral_iv_band():
+    cfg = se.StrategyConfig.for_profile("medium")
+    c = se.build_hv_rank_criterion(40.0, iv=0.21, hv=0.20, cfg=cfg)
+    assert "מפגר" not in c.meaning and "מתמחר" not in c.meaning
+
+
+# --------------------------------------------------------------------------
+# אחוזון עמיד לחריגים (v0.4.0)
+# --------------------------------------------------------------------------
+
+def test_percentile_bounded():
+    p = se.hv_percentile(synth_prices(400, seed=51))
+    assert 0.0 <= p <= 100.0
+
+
+def test_percentile_ignores_single_outlier_that_pins_rank():
+    """
+    יום אחד חריג באמצע השנה מותח את הסולם של min-max ומקריס את הדירוג,
+    בזמן שהאחוזון כמעט לא זז. זו כל הסיבה שהאחוזון הוא המדד הקובע.
+    """
+    base = synth_prices(360, daily_vol=0.012, seed=61)
+    spiked = base.copy()
+    spiked.iloc[180:] = spiked.iloc[180:] * 1.35        # פער יום בודד
+    rank_shift = abs(se.hv_rank(spiked) - se.hv_rank(base))
+    pct_shift = abs(se.hv_percentile(spiked) - se.hv_percentile(base))
+    assert pct_shift < rank_shift
+
+
+def test_percentile_high_when_tail_is_stormiest():
+    calm = zigzag(300, 0.002)
+    storm = zigzag(60, 0.05, start=float(calm.iloc[-1]))
+    # אחוזון לא מגיע ל-100 כשחלק מהחלון סוער באותה מידה. זו תכונה, לא באג.
+    assert se.hv_percentile(pd.concat([calm, storm], ignore_index=True)) > 80
+
+
+def test_relative_vol_percentile_tracks_direction():
+    bench = zigzag(360, 0.004)
+    calm = zigzag(300, 0.012)
+    storm = zigzag(60, 0.06, start=float(calm.iloc[-1]))
+    stock = pd.concat([calm, storm], ignore_index=True)
+    assert se.relative_vol_percentile(stock, bench) > 80
+
+
+def test_percentile_nan_on_short_series():
+    assert math.isnan(se.hv_percentile([100.0, 101.0]))
+
+
+def test_criteria_prefer_percentile_over_rank():
+    cfg = se.StrategyConfig.for_profile("medium")
+    # דירוג 100 (נעוץ בתקרה) אבל אחוזון 40 — האחוזון קובע
+    c1 = se.build_atr_criterion(100, 2, 2.0, cfg, rel_std_rank=100.0, rel_std_pct=40.0)
+    assert c1.passed is True
+    assert "דירוג 100%" in c1.current and "אחוזון 40%" in c1.current
+    c2 = se.build_hv_rank_criterion(100.0, None, None, cfg, pct=40.0)
+    assert c2.passed is True
+
+
+def test_criteria_fall_back_to_rank_without_percentile():
+    cfg = se.StrategyConfig.for_profile("medium")
+    assert se.build_hv_rank_criterion(100.0, None, None, cfg, pct=None).passed is False
+    assert se.build_atr_criterion(100, 2, 2.0, cfg, 100.0, None).passed is False
+
+
+def test_evaluate_threads_percentiles_through():
+    r = _ideal(hv_rank_value=100.0, hv_percentile_value=30.0)
+    assert next(c for c in r.criteria if c.key == "hv_rank").passed is True
