@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 # ---------------------------------------------------------------------------
@@ -216,8 +216,13 @@ def render_strategy_guide(compact: bool = False) -> None:
                 f'<div dir="rtl" style="margin:.9rem 0 .2rem;font-size:.75rem;'
                 f'letter-spacing:.08em;opacity:.55;font-weight:700;">'
                 f'{current_tag}</div>', unsafe_allow_html=True)
-        with st.expander(topic["title"], expanded=False):
-            st.markdown(_topic_html(topic), unsafe_allow_html=True)
+        st.markdown(
+            f'<div dir="rtl" style="border-right:2px solid var(--c-blue-lt,#4d9fff);'
+            f'padding:.5rem .8rem;margin:.5rem 0;background:#ffffff08;'
+            f'border-radius:0 8px 8px 0;">'
+            f'<div style="font-weight:700;font-size:.95rem;margin-bottom:.3rem;">'
+            f'{topic["title"]}</div>'
+            f'{_topic_html(topic)}</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":

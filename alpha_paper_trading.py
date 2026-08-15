@@ -2361,6 +2361,21 @@ GROUP_BOTTOM_ICONS = {"בית": "🏠", "גרף": "📈", "ניתוח": "🎯", 
 
 st.markdown("""
 <style>
+/* PILL_GAP_FIX — ה-iframe של option_menu מקבל גובה קבוע מסטרימליט,
+   הרבה מעבר ל-46 הפיקסלים שהפילים באמת צריכים. כאן מקבעים אותו
+   לגובה האמיתי. .top-pill-wrap הוא div ריק ולכן מוסתר. */
+div:has(> iframe[title^="streamlit_option_menu"]),
+div[data-testid="stCustomComponentV1"]:has(iframe[title^="streamlit_option_menu"]) {
+    height: 46px !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+iframe[title^="streamlit_option_menu"] {
+    height: 46px !important;
+    display: block !important;
+}
+.top-pill-wrap:empty { display: none !important; }
+
 .st-key-top_nav {
     position: sticky; top: 0; width: 100%;
     background: rgba(5, 7, 13, 0.94);
@@ -2454,11 +2469,14 @@ _active_map = {"🏠 Home": "tabbody_home", "📈 גרף": "tabbody_chart", "�
                "🧭 אסטרטגיה": "tabbody_strategy"}
 _active_key = _active_map.get(active_sub)
 st.markdown(
-    # TAB_GAP_FIX — הכלל הראשון מסתיר את הקונטיינר, השני מאפס את
-    # העטיפה הריקה שסטרימליט משאיר אחריו ושממשיכה לתפוס גובה.
+    # TAB_GAP_FIX_V2 — לא מספיק להסתיר את הקונטיינר. st.container שם את
+    # st-key-X על div פנימי, וההורה נשאר בזרימת ה-flex ותורם 14px של gap
+    # לכל טאב מוסתר. הכלל השני מסתיר את ההורה עצמו ומוציא אותו מהזרימה.
     "<style>" + "\n".join(f".st-key-{k} {{ display: none !important; }}\n"
-                           f".st-key-{k} + div:empty {{ display:none !important; }}\n"
-                           f"div:has(> .st-key-{k}) {{ gap:0 !important; }}"
+                           f"div[data-testid=\"stVerticalBlock\"] "
+                           f"> div:has(> .st-key-{k}) {{ display:none !important; }}\n"
+                           f"div[data-testid=\"stElementContainer\"]:has(.st-key-{k}) "
+                           f"{{ display:none !important; }}"
                            for k in _TAB_KEYS if k != _active_key) + "</style>",
     unsafe_allow_html=True,
 )

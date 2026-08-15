@@ -8,3 +8,4 @@ paper_portfolio.json
 *.bak_*
 
 *.bak
+*.backup_*.py

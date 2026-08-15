@@ -135,12 +135,77 @@ def _render_position(plan: se.PositionPlan) -> None:
         st.info("גודל הפוזיציה נחתך על ידי כלל ה-1%, לא על ידי אחוז התיק שביקשת.")
 
 
+
+GAP_PROBE_JS = """
+<div id="probe" style="direction:rtl;font-family:monospace;font-size:12px;
+     color:#c9d1d9;background:#0d1117;border:1px solid #30363d;
+     border-radius:8px;padding:10px;line-height:1.7;"></div>
+<script>
+const doc = window.parent.document;
+const main = doc.querySelector('section[data-testid="stMain"]') || doc.body;
+const all = [...main.querySelectorAll('div')];
+const suspects = all.filter(d => {
+    const r = d.getBoundingClientRect();
+    const cs = window.parent.getComputedStyle(d);
+    return r.height > 120 && r.height < 900 && d.innerText.trim().length === 0 && cs.display !== 'none';
+}).slice(0, 8);
+const esc = t => (t || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+// רק stMarkdown: שם מצאנו את החלל. מדפיסים את תחילת ה-HTML כדי לזהות מי זה.
+const marks = suspects.filter(d => d.dataset.testid === 'stMarkdown');
+const rows = (marks.length ? marks : suspects).map(d => {
+    const r = d.getBoundingClientRect();
+    const cs = window.parent.getComputedStyle(d);
+    const cls = (d.className || '(ללא class)').toString().slice(0, 60);
+    const inner = esc(d.innerHTML).slice(0, 220);
+    return `<div>גובה ${Math.round(r.height)}px · testid ${d.dataset.testid || '-'} · `
+         + `padding ${cs.paddingTop}/${cs.paddingBottom}`
+         + `<br><span style="opacity:.55">${cls}</span>`
+         + `<br><span style="color:#7ee787">${inner || '(HTML ריק לחלוטין)'}</span></div>`;
+});
+document.getElementById('probe').innerHTML =
+    rows.length ? rows.join('<hr style="border-color:#30363d;margin:6px 0">')
+                : 'לא נמצאו אלמנטים ריקים גבוהים. המרווח מגיע ממקור אחר.';
+</script>
+"""
+
+
+def _render_gap_probe() -> None:
+    import streamlit.components.v1 as components
+    components.html(GAP_PROBE_JS, height=320, scrolling=True)
+
+
 def render_strategy_tab(default_ticker: str = "NVDA",
                         default_portfolio: float = 100_000.0) -> None:
     st.markdown('<div dir="rtl"><h3 style="margin:.2rem 0;">אסטרטגיה — הציון המשולב</h3>'
                 '<div style="opacity:.7;font-size:.88rem;">'
                 'ארבעה קריטריונים: תנודתיות יחסית, אחוזון תנודתיות, מאקרו ולוח אירועים.'
                 '</div></div>', unsafe_allow_html=True)
+
+    # תיבות מתקפלות שקופות עם טקסט קריא, ותוויות ווידג'טים בהירות
+    st.markdown("""<style>
+      div[data-testid="stExpander"], div[data-testid="stExpander"] details,
+      div[data-testid="stExpander"] > details > summary {
+        background:transparent !important; background-color:transparent !important;
+        border-color:#ffffff2e !important; border-radius:10px !important;
+        box-shadow:none !important;
+      }
+      div[data-testid="stExpander"] summary,
+      div[data-testid="stExpander"] summary p,
+      div[data-testid="stExpander"] summary span {
+        color:#e6edf3 !important; font-weight:700 !important;
+        font-size:.92rem !important; opacity:1 !important;
+      }
+      div[data-testid="stExpander"] summary svg { fill:#e6edf3 !important; }
+      div[data-testid="stExpander"] div[data-testid="stExpanderDetails"] {
+        background:transparent !important;
+      }
+      label[data-testid="stWidgetLabel"] p,
+      div[data-testid="stCheckbox"] label p,
+      div[data-testid="stCheckbox"] label span {
+        color:#e6edf3 !important; opacity:1 !important; font-weight:600 !important;
+      }
+      div[data-testid="stCaptionContainer"] p { color:#9fb0c3 !important; }
+    </style>""", unsafe_allow_html=True)
 
     c1, c2, c3, c4 = st.columns([1.2, 1.2, 1, 1.2])
     ticker = c1.text_input("מניה", value=default_ticker, key="strat_ticker").strip().upper()
@@ -153,17 +218,9 @@ def render_strategy_tab(default_ticker: str = "NVDA",
 
     cfg = se.StrategyConfig.for_profile(profile)
 
-    # הכותרת מציגה את הערכים הפעילים, כדי שהם יהיו גלויים גם כשהאקורדיון סגור
-    _lbl = (f"כוונון ספים · יחסי "
-            f"{int(st.session_state.get('strat_rel_max', cfg.rel_vol_rank_pass_max))}%"
-            f" · HV {int(st.session_state.get('strat_hv_max', cfg.hv_rank_pass_max))}%"
-            f" · VIX {int(st.session_state.get('strat_vix_max', cfg.vix_max))}"
-            f" · Stop {st.session_state.get('strat_atr_mult', cfg.atr_stop_multiplier):.1f}×ATR")
-    with st.expander(_lbl, expanded=True):
+    with st.expander("כוונון ספים", expanded=True):
         st.caption("הספים אינם קבועי טבע. במשטר פיזור גבוה כמעט כל המניות "
-                   "יושבות באחוזון עליון, ואז שווה להעלות את הסף ל-70 "
-                   "ולראות מה עובר. הזזת סליידר לא דורשת הרצה מחדש של הניתוח "
-                   "אם הנתונים כבר בקאש.")
+                   "יושבות באחוזון עליון, ואז שווה להעלות את הסף ל-70 ולראות מה עובר.")
         e1, e2, e3 = st.columns(3)
         rel_max = e1.slider("סף אחוזון תנודתיות יחסית", 10, 95,
                             int(cfg.rel_vol_rank_pass_max), key="strat_rel_max")
@@ -191,6 +248,10 @@ def render_strategy_tab(default_ticker: str = "NVDA",
 
     with st.expander("מה כל פרמטר אומר", expanded=False):
         render_strategy_guide(compact=True)
+
+    if st.checkbox("אבחון מרווח", key="strat_gap_probe",
+                   help="סורק את העמוד ומדפיס אילו אלמנטים תופסים גובה ריק"):
+        _render_gap_probe()
 
     if not st.button("הרץ ניתוח", type="primary", key="strat_run"):
         st.caption("הנתונים נשמרים בקאש ל-15 דקות. הרצה חוזרת על אותה מניה מיידית.")
@@ -224,7 +285,7 @@ def render_strategy_tab(default_ticker: str = "NVDA",
                     'לא מוצגת תוכנית פוזיציה. פסק הדין אינו כניסה.</div>',
                     unsafe_allow_html=True)
 
-    with st.expander("מקורות נתונים ואזהרות"):
+    with st.expander("מקורות נתונים ואזהרות", expanded=False):
         st.dataframe(diag.to_table(), hide_index=True, use_container_width=True)
         for n in report.notes:
             st.caption(f"• {n}")
