@@ -14,6 +14,8 @@ import json, os, requests
 from streamlit_autorefresh import st_autorefresh
 from streamlit_option_menu import option_menu
 from streamlit_searchbox import st_searchbox
+from strategy_tab import render_strategy_tab
+from strategy_guide import render_strategy_guide
 
 # ── Anthropic API Key ──
 # אפשרות 1: קובץ .streamlit/secrets.toml  → ANTHROPIC_API_KEY = "sk-ant-..."
@@ -2350,7 +2352,7 @@ st.markdown('<div style="height:2px;"></div>', unsafe_allow_html=True)
 NAV_GROUPS = {
     "בית":   {"icon": "house",      "subs": ["🏠 Home"]},
     "גרף":   {"icon": "graph-up",   "subs": ["📈 גרף"]},
-    "ניתוח": {"icon": "cpu",        "subs": ["🎯 ניתוח", "⚖️ השוואה", "⏳ Backtest"]},
+    "ניתוח": {"icon": "cpu", "subs": ["🎯 ניתוח", "⚖️ השוואה", "⏳ Backtest", "🧭 אסטרטגיה"]},
     "מסחר":  {"icon": "cart",       "subs": ["🛒 מסחר", "💼 תיק", "👁️ Watchlist"]},
     "עוד":   {"icon": "three-dots", "subs": ["🔔 התראות", "📅 דוחות", "📖 מדריך"]},
 }
@@ -2444,11 +2446,12 @@ active_sub = render_top_pill(active_group)
 
 _TAB_KEYS = ["tabbody_home", "tabbody_chart", "tabbody_analysis", "tabbody_backtest",
              "tabbody_trade", "tabbody_guide", "tabbody_compare", "tabbody_portfolio",
-             "tabbody_alerts", "tabbody_reports", "tabbody_watchlist"]
+             "tabbody_alerts", "tabbody_reports", "tabbody_watchlist", "tabbody_strategy"]
 _active_map = {"🏠 Home": "tabbody_home", "📈 גרף": "tabbody_chart", "🎯 ניתוח": "tabbody_analysis",
                "⏳ Backtest": "tabbody_backtest", "🛒 מסחר": "tabbody_trade", "📖 מדריך": "tabbody_guide",
                "⚖️ השוואה": "tabbody_compare", "💼 תיק": "tabbody_portfolio", "🔔 התראות": "tabbody_alerts",
-               "📅 דוחות": "tabbody_reports", "👁️ Watchlist": "tabbody_watchlist"}
+               "📅 דוחות": "tabbody_reports", "👁️ Watchlist": "tabbody_watchlist",
+               "🧭 אסטרטגיה": "tabbody_strategy"}
 _active_key = _active_map.get(active_sub)
 st.markdown(
     "<style>" + "\n".join(f".st-key-{k} {{ display: none !important; }}"
@@ -7137,3 +7140,9 @@ with st.container(key="tabbody_watchlist"):
                     st.session_state.watchlist.pop(i)
                     save_user_data()
                     st.rerun()
+
+# ════════════════════════════════════════
+# TAB 14 — 🧭 אסטרטגיה (הציון המשולב)
+# ════════════════════════════════════════
+with st.container(key="tabbody_strategy"):
+    render_strategy_tab(default_ticker=st.session_state.get("ticker", "NVDA"))
