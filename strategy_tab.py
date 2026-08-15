@@ -153,9 +153,17 @@ def render_strategy_tab(default_ticker: str = "NVDA",
 
     cfg = se.StrategyConfig.for_profile(profile)
 
-    with st.expander("כוונון ספים", expanded=False):
+    # הכותרת מציגה את הערכים הפעילים, כדי שהם יהיו גלויים גם כשהאקורדיון סגור
+    _lbl = (f"כוונון ספים · יחסי "
+            f"{int(st.session_state.get('strat_rel_max', cfg.rel_vol_rank_pass_max))}%"
+            f" · HV {int(st.session_state.get('strat_hv_max', cfg.hv_rank_pass_max))}%"
+            f" · VIX {int(st.session_state.get('strat_vix_max', cfg.vix_max))}"
+            f" · Stop {st.session_state.get('strat_atr_mult', cfg.atr_stop_multiplier):.1f}×ATR")
+    with st.expander(_lbl, expanded=True):
         st.caption("הספים אינם קבועי טבע. במשטר פיזור גבוה כמעט כל המניות "
-                   "יושבות באחוזון עליון, ואז שווה להעלות את הסף ולראות מה עובר.")
+                   "יושבות באחוזון עליון, ואז שווה להעלות את הסף ל-70 "
+                   "ולראות מה עובר. הזזת סליידר לא דורשת הרצה מחדש של הניתוח "
+                   "אם הנתונים כבר בקאש.")
         e1, e2, e3 = st.columns(3)
         rel_max = e1.slider("סף אחוזון תנודתיות יחסית", 10, 95,
                             int(cfg.rel_vol_rank_pass_max), key="strat_rel_max")

@@ -2454,11 +2454,7 @@ _active_map = {"🏠 Home": "tabbody_home", "📈 גרף": "tabbody_chart", "�
                "🧭 אסטרטגיה": "tabbody_strategy"}
 _active_key = _active_map.get(active_sub)
 st.markdown(
-    # TAB_GAP_FIX — הכלל הראשון מסתיר את הקונטיינר, השני מאפס את
-    # העטיפה הריקה שסטרימליט משאיר אחריו ושממשיכה לתפוס גובה.
-    "<style>" + "\n".join(f".st-key-{k} {{ display: none !important; }}\n"
-                           f".st-key-{k} + div:empty {{ display:none !important; }}\n"
-                           f"div:has(> .st-key-{k}) {{ gap:0 !important; }}"
+    "<style>" + "\n".join(f".st-key-{k} {{ display: none !important; }}"
                            for k in _TAB_KEYS if k != _active_key) + "</style>",
     unsafe_allow_html=True,
 )
