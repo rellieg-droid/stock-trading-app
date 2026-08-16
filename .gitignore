@@ -10,3 +10,10 @@ paper_portfolio.json
 *.bak
 *.backup_*.py
 *.backup_*.py
+
+# נוסף אוטומטית ע"י wrap_up.py
+*.orig
+*.rej
+_snapshots/
+portfolio.json
+user_data.json

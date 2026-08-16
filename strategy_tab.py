@@ -22,6 +22,7 @@ strategy_tab.py
 from __future__ import annotations
 
 import html
+from datetime import datetime
 from typing import Optional
 
 import streamlit as st
@@ -136,44 +137,6 @@ def _render_position(plan: se.PositionPlan) -> None:
 
 
 
-GAP_PROBE_JS = """
-<div id="probe" style="direction:rtl;font-family:monospace;font-size:12px;
-     color:#c9d1d9;background:#0d1117;border:1px solid #30363d;
-     border-radius:8px;padding:10px;line-height:1.7;"></div>
-<script>
-const doc = window.parent.document;
-const main = doc.querySelector('section[data-testid="stMain"]') || doc.body;
-const all = [...main.querySelectorAll('div')];
-const suspects = all.filter(d => {
-    const r = d.getBoundingClientRect();
-    const cs = window.parent.getComputedStyle(d);
-    return r.height > 120 && r.height < 900 && d.innerText.trim().length === 0 && cs.display !== 'none';
-}).slice(0, 8);
-const esc = t => (t || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
-// רק stMarkdown: שם מצאנו את החלל. מדפיסים את תחילת ה-HTML כדי לזהות מי זה.
-const marks = suspects.filter(d => d.dataset.testid === 'stMarkdown');
-const rows = (marks.length ? marks : suspects).map(d => {
-    const r = d.getBoundingClientRect();
-    const cs = window.parent.getComputedStyle(d);
-    const cls = (d.className || '(ללא class)').toString().slice(0, 60);
-    const inner = esc(d.innerHTML).slice(0, 220);
-    return `<div>גובה ${Math.round(r.height)}px · testid ${d.dataset.testid || '-'} · `
-         + `padding ${cs.paddingTop}/${cs.paddingBottom}`
-         + `<br><span style="opacity:.55">${cls}</span>`
-         + `<br><span style="color:#7ee787">${inner || '(HTML ריק לחלוטין)'}</span></div>`;
-});
-document.getElementById('probe').innerHTML =
-    rows.length ? rows.join('<hr style="border-color:#30363d;margin:6px 0">')
-                : 'לא נמצאו אלמנטים ריקים גבוהים. המרווח מגיע ממקור אחר.';
-</script>
-"""
-
-
-def _render_gap_probe() -> None:
-    import streamlit.components.v1 as components
-    components.html(GAP_PROBE_JS, height=320, scrolling=True)
-
-
 def render_strategy_tab(default_ticker: str = "NVDA",
                         default_portfolio: float = 100_000.0) -> None:
     st.markdown('<div dir="rtl"><h3 style="margin:.2rem 0;">אסטרטגיה — הציון המשולב</h3>'
@@ -249,29 +212,48 @@ def render_strategy_tab(default_ticker: str = "NVDA",
     with st.expander("מה כל פרמטר אומר", expanded=False):
         render_strategy_guide(compact=True)
 
-    if st.checkbox("אבחון מרווח", key="strat_gap_probe",
-                   help="סורק את העמוד ומדפיס אילו אלמנטים תופסים גובה ריק"):
-        _render_gap_probe()
+    run_clicked = st.button("הרץ ניתוח", type="primary", key="strat_run")
 
-    if not st.button("הרץ ניתוח", type="primary", key="strat_run"):
+    # חתימת הפרמטרים הנוכחיים בטופס. משמשת לזיהוי תוצאה מיושנת.
+    params = (ticker, portfolio, position_pct, profile,
+              rel_max, hv_max, vix_max, atr_mult, blackout, macro)
+
+    if run_clicked:
+        if not ticker:
+            st.warning("הזיני סימול מניה.")
+            return
+        with st.spinner(f"מושך נתונים עבור {ticker}..."):
+            try:
+                report, diag = sd.build_report(
+                    ticker, portfolio_value=portfolio, position_pct=position_pct,
+                    risk_profile=profile, macro_event=macro or None, config=cfg)
+            except Exception as exc:
+                st.error(f"שגיאה במשיכת הנתונים: {exc}")
+                return
+        st.session_state["strat_result"] = {
+            "report": report, "diag": diag, "params": params,
+            "ticker": ticker, "portfolio": portfolio,
+            "ran_at": datetime.now(),
+        }
+
+    # מכאן והלאה מציירים תמיד מה-session_state, גם ב-rerun שלא נגרם מהכפתור.
+    result = st.session_state.get("strat_result")
+    if not result:
         st.caption("הנתונים נשמרים בקאש ל-15 דקות. הרצה חוזרת על אותה מניה מיידית.")
         return
 
-    if not ticker:
-        st.warning("הזיני סימול מניה.")
-        return
+    report, diag = result["report"], result["diag"]
+    portfolio = result["portfolio"]
 
-    with st.spinner(f"מושך נתונים עבור {ticker}..."):
-        try:
-            report, diag = sd.build_report(
-                ticker, portfolio_value=portfolio, position_pct=position_pct,
-                risk_profile=profile, macro_event=macro or None, config=cfg)
-        except Exception as exc:
-            st.error(f"שגיאה במשיכת הנתונים: {exc}")
-            return
+    if result["params"] != params:
+        st.warning(
+            f"מוצגת תוצאה של {result['ticker']} מהרצת {result['ran_at']:%H:%M}. "
+            f"הפרמטרים בטופס השתנו מאז — לחצי \"הרץ ניתוח\" לרענון.")
+    else:
+        st.caption(f"הורץ ב-{result['ran_at']:%H:%M:%S}")
 
     if report is None:
-        st.error(f"לא ניתן להפיק ניתוח עבור {ticker}.")
+        st.error(f"לא ניתן להפיק ניתוח עבור {result['ticker']}.")
         st.dataframe(diag.to_table(), hide_index=True, use_container_width=True)
         return
 

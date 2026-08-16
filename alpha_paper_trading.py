@@ -828,6 +828,30 @@ def pf_val(p: dict) -> float:
         if pr: total += pos['shares'] * pr
     return total
 
+
+# ── Risk / Reward ──
+from rr_tab import render_position_manager
+
+
+def _rr_earnings_date(symbol: str):
+    """next_earnings מחזיר (dd/mm/yyyy, ימים). המודול צריך date בלבד."""
+    try:
+        res = next_earnings(symbol)
+        if not res:
+            return None
+        return datetime.strptime(res[0], "%d/%m/%Y").date()
+    except Exception:
+        return None
+
+
+def _rr_atr(symbol: str):
+    """ATR יומי לסימול. משתמש ב-true_atr הקיים, שכבר מטפל ב-None."""
+    try:
+        return true_atr(load_ohlcv(symbol, "3mo", "1d"))
+    except Exception:
+        return None
+
+
 # ── DATA LAYER ──
 # תיקון מרכזי: שימוש ב-Ticker.history() שמחזיר DataFrame נקי
 @st.cache_data(ttl=300)
@@ -2357,7 +2381,16 @@ NAV_GROUPS = {
     "עוד":   {"icon": "three-dots", "subs": ["🔔 התראות", "📅 דוחות", "📖 מדריך"]},
 }
 GROUP_ORDER = ["בית", "גרף", "ניתוח", "מסחר", "עוד"]
-GROUP_BOTTOM_ICONS = {"בית": "🏠", "גרף": "📈", "ניתוח": "🎯", "מסחר": "🛒", "עוד": "⋯"}
+GROUP_BOTTOM_ICONS = {"בית": "🏠", "גרף": "📈", "ניתוח": "🎯", "מסחר": "🛒", "עוד": "☰"}
+
+# טקסט ה-tooltip בריחוף. מפרט מה יש בכל קבוצה, כי האייקון לבדו לא מספיק.
+GROUP_TOOLTIPS = {
+    "בית":   "בית — סקירת שוק, מומלצות AI, מדדים וקריפטו",
+    "גרף":   "גרף — נרות, אינדיקטורים וזיהוי תבניות",
+    "ניתוח": "ניתוח — ציון משולב, השוואה, Backtest ואסטרטגיה",
+    "מסחר":  "מסחר — קנייה ומכירה, תיק אחזקות, Watchlist וניהול יעדים",
+    "עוד":   "עוד — התראות, לוח דוחות ומדריך",
+}
 
 st.markdown("""
 <style>
@@ -2410,6 +2443,31 @@ iframe[title^="streamlit_option_menu"] {
     overflow: hidden;
 }
 .top-pill-wrap iframe { display: block; }
+
+/* NAV_LABELS — אייקון בלי טקסט לא ניתן לפענוח. כאן מגדילים את הכפתור,
+   מוסיפים תווית קבועה מתחתיו, ומצמצמים את המרווח ביניהם לאפס. */
+.st-key-top_nav { padding: 0.45rem 0.5rem 0.3rem !important; }
+.st-key-top_nav div[data-testid="stVerticalBlock"] { gap: 0 !important; }
+.st-key-top_nav .stButton > button {
+    font-size: 1.55rem !important;
+    height: 48px !important;
+    line-height: 1 !important;
+}
+.st-key-top_nav .stButton > button[kind="primary"] {
+    width: 48px !important;
+    height: 48px !important;
+}
+.nav-label {
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: .01em;
+    color: var(--c-text-3);
+    margin: 1px 0 0;
+    white-space: nowrap;
+    user-select: none;
+}
+.nav-label-on { color: var(--c-blue); font-weight: 800; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -2422,9 +2480,15 @@ def render_top_nav(active_group):
                 is_active = (group == active_group)
                 if st.button(GROUP_BOTTOM_ICONS[group], key=f"nav_{group}",
                              use_container_width=True,
+                             help=GROUP_TOOLTIPS.get(group, group),
                              type="primary" if is_active else "secondary"):
                     st.session_state.active_group = group
                     st.rerun()
+                # תווית קבועה. tooltip לבדו לא עוזר במגע, שם אין ריחוף.
+                st.markdown(
+                    f'<div class="nav-label{" nav-label-on" if is_active else ""}">'
+                    f'{group}</div>',
+                    unsafe_allow_html=True)
 
 
 def render_top_pill(active_group):
@@ -5828,6 +5892,18 @@ with st.container(key="tabbody_trade"):
                                 st.error("אין מספיק מניות.")
             else:
                 st.error(f"לא ניתן לטעון מחיר עבור {ticker}.")
+
+            # ── ניהול יעדים לפוזיציות פתוחות ──
+            st.markdown('<hr style="margin:16px 0 10px;"/>', unsafe_allow_html=True)
+            st.markdown("#### ניהול יעדים לפוזיציות פתוחות")
+            render_position_manager(
+                positions=st.session_state.pf.get("positions", {}),
+                price_fetcher=get_live_price,
+                atr_fetcher=_rr_atr,
+                earnings_fetcher=_rr_earnings_date,
+                portfolio_value=pf_val(st.session_state.pf),
+                key_prefix="pm_trade",
+            )
 
 
         # ════════════════════════════════════════
