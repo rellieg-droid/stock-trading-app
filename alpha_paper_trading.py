@@ -1046,6 +1046,91 @@ def atr_percent(symbol: str) -> float | None:
         return None
 
 
+def _iv_finite(x) -> bool:
+    """בדיקת מספר תקין בלי תלות ב-math או numpy."""
+    if x is None:
+        return False
+    if x != x:                      # NaN
+        return False
+    return x not in (float("inf"), float("-inf"))
+
+
+def _iv_stats(symbol: str):
+    """
+    IV נוכחי בכסף + HV ממומש + דירוג HV.
+    מחזיר None רק כשאין אופציות לסימול (למשל טיקרים בת"א).
+    הייבוא עצל בכוונה: מונע ייבוא מעגלי ולא מאט את עליית האפליקציה.
+    """
+    try:
+        from strategy_data import fetch_atm_iv, fetch_history
+        from strategy_engine import annualized_vol, hv_rank
+    except Exception:
+        return None
+
+    try:
+        iv = fetch_atm_iv(symbol)
+    except Exception:
+        return None
+    if iv is None or not _iv_finite(iv):
+        return None
+
+    out = {"iv": float(iv), "hv": None, "rank": None, "ratio": None}
+
+    # HV הוא תוספת, לא תנאי. אם הוא נופל, IV לבד עדיין שווה משהו.
+    try:
+        d = fetch_history(symbol, period="2y", interval="1d")
+        if d is not None and not d.empty and "Close" in d:
+            closes = d["Close"]
+            hv = annualized_vol(closes, window=21)
+            rk = hv_rank(closes, window=21, lookback=252)
+            if _iv_finite(hv) and hv > 0:
+                out["hv"] = float(hv)
+                out["ratio"] = float(iv) / float(hv)
+            if _iv_finite(rk):
+                out["rank"] = float(rk)
+    except Exception:
+        pass
+
+    return out
+
+
+def _iv_badge_html(symbol: str) -> str:
+    """
+    באדג' IV לצד באדג' ה-ATR. מחרוזת ריקה אם אין נתון.
+    הגוף קצר בכוונה (מובייל). הדירוג והיחס נמצאים ב-tooltip.
+    """
+    s = _iv_stats(symbol)
+    if not s:
+        return ""
+
+    iv, hv, rank, ratio = s["iv"], s["hv"], s["rank"], s["ratio"]
+
+    if ratio is None:
+        color, short, label = "#8b949e", "אין HV", "אין השוואה ל-HV"
+    elif ratio >= 1.30:
+        color, short, label = "#f0883e", "פרמיה יקרה", "פרמיה יקרה יחסית לתנועה בפועל"
+    elif ratio <= 0.85:
+        color, short, label = "#3fb950", "פרמיה זולה", "פרמיה זולה יחסית לתנועה בפועל"
+    else:
+        color, short, label = "#8b949e", "פרמיה סבירה", "פרמיה סבירה"
+
+    tip = f"IV בכסף, תפוגה 20-60 ימים: {iv * 100:.1f}%. "
+    if hv is not None:
+        tip += f"HV ממומש 21 יום: {hv * 100:.1f}%. "
+    if ratio is not None:
+        tip += f"IV/HV {ratio:.2f} — {label}. "
+    if rank is not None:
+        tip += f"HV Rank {rank:.0f}% (פרוקסי ל-IV Rank, לא אותו מדד). "
+    tip += "תיאור תמחור בלבד, לא איתות."
+
+    return (
+        f'<span title="{tip}" '
+        f'style="background:{color}1f;color:{color};border:1px solid {color}44;'
+        f'border-radius:10px;padding:4px 12px;font-size:.92rem;font-weight:700;'
+        f'white-space:nowrap;">IV {iv * 100:.1f}% · {short}</span>'
+    )
+
+
 def _atr_badge_html(symbol: str) -> str:
     """באדג' ATR%. מחרוזת ריקה אם אין נתון."""
     p = atr_percent(symbol)
@@ -2364,6 +2449,7 @@ st.markdown(
     + _earnings_badge_html(ticker)
     + _vix_badge_html()
     + _atr_badge_html(ticker)
+    + _iv_badge_html(ticker)
     + (f'<span style="color:var(--c-text-2);font-size:.78rem;margin-right:auto;">52ש׳: {sym}{w52l:.2f} – {sym}{w52h:.2f}</span>' if w52l and w52h else '')
     + (f'<span style="color:var(--c-text-2);font-size:.78rem;">סגירה קודמת: {sym}{prev_c:.2f}</span>' if prev_c else '')
     + f'</div></div>',
