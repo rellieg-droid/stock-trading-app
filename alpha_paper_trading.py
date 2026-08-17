@@ -5948,13 +5948,27 @@ with st.container(key="tabbody_trade"):
                                 ts  = pos['shares'] + si_
                                 pos['avg_price'] = (pos['shares'] * pos['avg_price'] + si_ * cp_) / ts
                                 pos['shares']    = ts
+
+                                # ── סטופ בכניסה ──────────────────────────────────────────
+                                # נקבע פעם אחת בלבד. קנייה חוזרת לא מזיזה אותו (מדיניות א).
+                                if pos.get("stop_price") is None:
+                                    try:
+                                        _entry_atr = _rr_atr(ticker)
+                                    except Exception:
+                                        _entry_atr = None
+                                    if _entry_atr:
+                                        pos["stop_price"] = round(cp_ - 2.0 * _entry_atr, 2)
+                                        pos["entry_price"] = round(cp_, 2)
+                                        pos["entry_atr"] = round(_entry_atr, 4)
+                                        pos["stop_atr_mult"] = 2.0
+                                        pos["entry_date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                                 p['trades'].append({
                                     "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                     "symbol": ticker, "action": "BUY",
                                     "shares": si_, "price": cp_, "total": tv_, "note": nt_,
                                 })
                                 save_pf(p)
-                                st.success(f"✅ קנית {si_} מניות ב-{sym}{cp_:.2f}")
+                                st.success(f"✅ קנית {si_} מניות ב-{sym}{cp_:.2f}" + (f" · סטופ {sym}{pos['stop_price']:.2f}" if pos.get("stop_price") else ""))
                                 st.rerun()
                             else:
                                 st.error("אין מספיק מזומן!")
