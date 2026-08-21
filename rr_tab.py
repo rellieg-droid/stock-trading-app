@@ -844,8 +844,11 @@ def render_position_manager(
 
     # אם לא נשמר סטופ בפוזיציה, גוזרים אותו מ-ATR
     if p["stop"]:
-        stop = c2.number_input("סטופ", min_value=0.01, value=float(p["stop"]),
-                               step=0.01, format="%.2f", key=f"{key_prefix}_stop")
+        stop = c2.number_input("סטופ (שמור)", min_value=0.01, value=float(p["stop"]),
+                               step=0.01, format="%.2f", key=f"{key_prefix}_stop",
+                               help="מקור: שמור מהפוזיציה "
+                                    "(נקבע בעת הכניסה, לא מחושב "
+                                    "מחדש מ-ATR בכל rerun). ניתן לעריכה ידנית.")
     else:
         fallback = atr if atr else p["entry"] * 0.02
         stop = rr.stop_from_atr(p["entry"], fallback, default_atr_mult, p["direction"])
