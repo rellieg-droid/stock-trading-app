@@ -16,6 +16,7 @@ from streamlit_option_menu import option_menu
 from streamlit_searchbox import st_searchbox
 from strategy_tab import render_strategy_tab
 from strategy_guide import render_strategy_guide
+from position_sizing import atr_position_defaults
 
 # ── Anthropic API Key ──
 # אפשרות 1: קובץ .streamlit/secrets.toml  → ANTHROPIC_API_KEY = "sk-ant-..."
@@ -1775,12 +1776,19 @@ def render_position_module(ticker: str, df, info: dict, analyst_d: dict,
     with ps1:
         account_val = st.number_input("גודל תיק ($):", value=10000, min_value=100, step=500, key="ps_acc")
         risk_pct    = st.slider("סיכון לעסקה (%):", 0.5, 5.0, 1.0, 0.5, key="ps_risk")
+
+    # ATR מבוסס strategy_engine.build_position_plan, מקור יחיד לשני מחשבוני ה-Position Sizing
+    _atr_plan = atr_position_defaults(df, cur_price, account_val, risk_pct)
+    _default_stop   = _atr_plan.stop_price        if _atr_plan else round(float(cur_price) * 0.95, 2)
+    _default_target = _atr_plan.take_profit_price if _atr_plan else round(float(cur_price) * 1.12, 2)
+
     with ps2:
         entry_p = st.number_input("מחיר כניסה:", value=float(cur_price), min_value=0.01, key="ps_entry")
-        stop_p  = st.number_input("Stop Loss:", value=round(float(cur_price) * 0.95, 2), min_value=0.01, key="ps_stop")
+        stop_p  = st.number_input("Stop Loss:", value=round(float(_default_stop), 2), min_value=0.01, key="ps_stop")
     with ps3:
-        target_p = st.number_input("מחיר יעד:", value=round(float(cur_price) * 1.12, 2), min_value=0.01, key="ps_tgt")
-        st.markdown(f'<div style="color:#8b949e;font-size:.72rem;margin-top:8px;">מחיר נוכחי: <b style="color:#e6edf3;">{ccy_s}{cur_price:.2f}</b></div>', unsafe_allow_html=True)
+        target_p = st.number_input("מחיר יעד:", value=round(float(_default_target), 2), min_value=0.01, key="ps_tgt")
+        _atr_note = '<div style="color:#8b949e;font-size:.66rem;margin-top:2px;">ברירת מחדל: ATR</div>' if _atr_plan else '<div style="color:#8b949e;font-size:.66rem;margin-top:2px;">ATR לא זמין — ברירת מחדל אחוזית</div>'
+        st.markdown(f'<div style="color:#8b949e;font-size:.72rem;margin-top:8px;">מחיר נוכחי: <b style="color:#e6edf3;">{ccy_s}{cur_price:.2f}</b></div>' + _atr_note, unsafe_allow_html=True)
 
     if entry_p > stop_p:
         rps     = entry_p - stop_p
@@ -1850,16 +1858,27 @@ def render_position_module(ticker: str, df, info: dict, analyst_d: dict,
                 "_ret":          ret,
             })
         if rows:
-            df_pf = pd.DataFrame(rows)
-            def color_ret(v):
-                try:
-                    n = float(str(v).replace("%","").replace("+",""))
-                    return "color:#3fb950;font-weight:600" if n > 0 else ("color:#f85149;font-weight:600" if n < 0 else "")
-                except: return ""
-            disp = [c for c in ["מניה","מחיר קנייה","מחיר נוכחי","כמות","ערך כולל","תשואה %"] if c in df_pf.columns]
-            st.dataframe(
-                df_pf[disp].style.map(color_ret, subset=["תשואה %"]),
-                use_container_width=True, hide_index=True
+            th_pf = 'style="background:#0d1117;color:#8b949e;font-size:.64rem;text-transform:uppercase;padding:7px 10px;text-align:right;border-bottom:2px solid #21262d;"'
+            headers_pf = ["מניה","מחיר קנייה","מחיר נוכחי","כמות","ערך כולל","תשואה %"]
+            h_html_pf = "<tr>" + "".join(f"<th {th_pf}>{h}</th>" for h in headers_pf) + "</tr>"
+            rows_html_pf = ""
+            for i_pf, r_pf in enumerate(rows):
+                bg_pf = "#161b22" if i_pf % 2 == 0 else "#0d1117"
+                rc_pf = "#3fb950" if r_pf["_ret"] >= 0 else "#f85149"
+                cells_pf = (
+                    f'<td style="padding:7px 10px;color:#e6edf3;font-weight:700;font-size:.78rem;border-bottom:1px solid #21262d;">{r_pf["מניה"]}</td>'
+                    f'<td style="padding:7px 10px;font-family:JetBrains Mono,monospace;font-size:.75rem;color:#8b949e;border-bottom:1px solid #21262d;">{r_pf["מחיר קנייה"]}</td>'
+                    f'<td style="padding:7px 10px;font-family:JetBrains Mono,monospace;font-size:.75rem;color:#e6edf3;border-bottom:1px solid #21262d;">{r_pf["מחיר נוכחי"]}</td>'
+                    f'<td style="padding:7px 10px;font-family:JetBrains Mono,monospace;font-size:.75rem;color:#e6edf3;border-bottom:1px solid #21262d;">{r_pf["כמות"]}</td>'
+                    f'<td style="padding:7px 10px;font-family:JetBrains Mono,monospace;font-size:.75rem;color:#e6edf3;border-bottom:1px solid #21262d;">{r_pf["ערך כולל"]}</td>'
+                    f'<td style="padding:7px 10px;font-family:JetBrains Mono,monospace;font-size:.78rem;color:{rc_pf};font-weight:600;border-bottom:1px solid #21262d;">{r_pf["תשואה %"]}</td>'
+                )
+                rows_html_pf += f'<tr style="background:{bg_pf};">{cells_pf}</tr>'
+            st.markdown(
+                '<div style="overflow-x:auto;">'
+                '<table style="width:100%;border-collapse:collapse;direction:rtl;">'
+                f'<thead>{h_html_pf}</thead><tbody>{rows_html_pf}</tbody>'
+                '</table></div>', unsafe_allow_html=True
             )
 
 
@@ -5569,8 +5588,11 @@ document.getElementById("ql-high") && (document.getElementById("ql-high").style.
             acc = st.number_input("גודל חשבון:", value=10000, min_value=100, step=500)
             rsk = st.slider("סיכון (%):", .5, 5.0, 1.0, .5)
             enp = st.number_input("מחיר כניסה:", value=float(cp_) if cp_ else 100., min_value=.01)
-            slp = st.number_input("Stop Loss:",  value=float(enp * .95), min_value=.01)
-            tgp = st.number_input("יעד:",        value=float(enp * 1.10), min_value=.01)
+            _atr_plan2 = atr_position_defaults(df, enp, acc, rsk)
+            _def_stop2 = _atr_plan2.stop_price        if _atr_plan2 else float(enp * .95)
+            _def_tgt2  = _atr_plan2.take_profit_price if _atr_plan2 else float(enp * 1.10)
+            slp = st.number_input("Stop Loss:",  value=float(_def_stop2), min_value=.01)
+            tgp = st.number_input("יעד:",        value=float(_def_tgt2), min_value=.01)
         with cr_:
             st.markdown("#### 📊 תוצאות")
             if enp > slp:
