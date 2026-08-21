@@ -6047,15 +6047,62 @@ with st.container(key="tabbody_trade"):
                     c3.metric("מפסידות", ls)
                     c4.metric("Win Rate",f"{wr:.0f}%")
                 st.divider()
-                def ca(v):
-                    return "color:#3fb950;font-weight:600" if v == "BUY" else "color:#f85149;font-weight:600"
-                def cp2(v):
-                    try: return "color:#3fb950" if float(v) >= 0 else "color:#f85149"
-                    except: return ""
-                st_ = dt.style.map(ca, subset=['action'])
-                if 'pnl' in dt.columns:
-                    st_ = st_.map(cp2, subset=['pnl'])
-                st.dataframe(st_, use_container_width=True)
+                def _esc_tr(v):
+                    s = "" if v is None else str(v)
+                    return (s.replace("&", "&amp;").replace("<", "&lt;")
+                             .replace(">", "&gt;").replace('"', "&quot;"))
+                def _fmt_trade_val(col, v):
+                    if col in ("price", "total"):
+                        try: return f"${float(v):,.2f}"
+                        except Exception: return _esc_tr(v)
+                    if col == "pnl":
+                        try:
+                            if v is None or (isinstance(v, float) and pd.isna(v)):
+                                return "—"
+                            return f"${float(v):+,.2f}"
+                        except Exception:
+                            return "—"
+                    if col == "shares":
+                        try: return f"{int(v)}"
+                        except Exception: return _esc_tr(v)
+                    if v is None or (isinstance(v, float) and pd.isna(v)):
+                        return ""
+                    return _esc_tr(v)
+
+                _trade_cols = [c for c in ["date","symbol","action","shares","price","total","pnl","note"] if c in dt.columns]
+                _trade_headers = {"date":"תאריך","symbol":"סימול","action":"פעולה",
+                                  "shares":"כמות","price":"מחיר","total":"סה״כ",
+                                  "pnl":"רווח/הפסד","note":"הערה"}
+                th_tr = ('style="background:#0d1117;color:#8b949e;font-size:.64rem;'
+                         'text-transform:uppercase;padding:7px 10px;text-align:right;'
+                         'border-bottom:2px solid #21262d;"')
+                h_html_tr = "<tr>" + "".join(f"<th {th_tr}>{_trade_headers.get(c, c)}</th>" for c in _trade_cols) + "</tr>"
+                rows_html_tr = ""
+                for i_tr, row_tr in dt.reset_index(drop=True).iterrows():
+                    bg_tr = "#161b22" if i_tr % 2 == 0 else "#0d1117"
+                    act_clr = "#3fb950" if row_tr.get("action") == "BUY" else "#f85149"
+                    pnl_val = row_tr.get("pnl") if "pnl" in dt.columns else None
+                    pnl_ok = pnl_val is not None and not (isinstance(pnl_val, float) and pd.isna(pnl_val))
+                    pnl_clr = ("#3fb950" if pnl_ok and float(pnl_val) >= 0 else "#f85149") if pnl_ok else "#8b949e"
+                    cells_tr = ""
+                    for c in _trade_cols:
+                        txt = _fmt_trade_val(c, row_tr.get(c))
+                        if c == "action":
+                            clr, wt = act_clr, "700"
+                        elif c == "pnl":
+                            clr, wt = pnl_clr, "600"
+                        else:
+                            clr, wt = "#e6edf3", "400"
+                        mono = "font-family:JetBrains Mono,monospace;" if c in ("shares", "price", "total", "pnl") else ""
+                        cells_tr += (f'<td style="padding:7px 10px;{mono}color:{clr};font-weight:{wt};'
+                                     f'font-size:.75rem;border-bottom:1px solid #21262d;">{txt}</td>')
+                    rows_html_tr += f'<tr style="background:{bg_tr};">{cells_tr}</tr>'
+                st.markdown(
+                    '<div style="overflow-x:auto;">'
+                    '<table style="width:100%;border-collapse:collapse;direction:rtl;">'
+                    f'<thead>{h_html_tr}</thead><tbody>{rows_html_tr}</tbody>'
+                    '</table></div>', unsafe_allow_html=True
+                )
                 st.download_button("⬇️ הורד CSV",
                                    dt.to_csv(index=False).encode('utf-8'),
                                    "trades.csv", "text/csv")
