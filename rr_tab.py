@@ -632,12 +632,22 @@ def render_rr_section(
             "מחיר סגירה לפני הדוח", min_value=0.01, value=float(plan.entry),
             step=0.01, format="%.2f", key=f"{key_prefix}_ref",
             help="שני אם הפוזיציה כבר ברווח — הפער נמדד מהסגירה, לא מהכניסה.")
-        span = i2.slider("טווח פערים לבדיקה (%)", 5, 40, 20, 5,
-                         key=f"{key_prefix}_span")
+        # selectbox ולא slider בכוונה: ל-st.slider יש בועה צפה מעל
+        # הידית שחישבה מיקום לפי הרוחב הצר של העמודה ופלשה
+        # חזותית לתיבת הקלט השכנה (Streamlit, אומת ב-repro).
+        # selectbox לא סובל מהבאג הזה, והערך הנבחר תמיד גלוי בבירור.
+        span = i2.selectbox(
+            "טווח פערים לבדיקה (%)", [5, 10, 15, 20, 25, 30, 35, 40],
+            index=3, key=f"{key_prefix}_span",
+            help="טווח רחב יותר בודק יותר תרחישי פער (כולל קיצוניים יותר) בטבלת הסימולציה.")
         gaps = tuple(round(x / 100, 4) for x in range(-span, span + 1, 5))
 
+    # הקופסה משתמשת באותו אחוז שנבחר בתפריט (span), לא קבוע, כדי
+    # שההסבר ישתנה לבחירה. כשלא אינטראקטיבי span לא קיים, ומשתמשים
+    # בברירת מחדל של 15%.
+    worst_pct = span if interactive else 15
     outcomes = rr.gap_scenario_table(plan, gaps=gaps, ref_price=ref_price)
-    wc = rr.worst_case_gap_loss(plan, gap_pct=0.15, ref_price=ref_price)
+    wc = rr.worst_case_gap_loss(plan, gap_pct=worst_pct / 100, ref_price=ref_price)
 
     st.markdown('<div dir="rtl" style="text-align:right;font-weight:700;margin:.6rem 0 .2rem;">'
                 'סימולציית פער בפתיחה שאחרי הדוח</div>', unsafe_allow_html=True)
@@ -645,7 +655,7 @@ def render_rr_section(
         f'<div dir="rtl" style="border-right:3px solid {_C["red"]};'
         f'background:{_C["red"]}12;border-radius:10px;padding:.7rem .95rem;'
         f'margin:.2rem 0 .7rem;font-size:.87rem;line-height:1.65;color:{_C["text"]};">'
-        f'<b>הסטופ אינו מגן מעבר לדוח.</b> בפער נגדי של 15% הפוזיציה נסגרת ב-'
+        f'<b>הסטופ אינו מגן מעבר לדוח.</b> בפער נגדי של {worst_pct}% הפוזיציה נסגרת ב-'
         f'${wc["open_price"]:,.2f} ולא בסטופ. ההפסד בפועל '
         f'${abs(wc["actual_loss"]):,.0f} במקום ${abs(wc["planned_loss"]):,.0f} '
         f'שתוכננו — פי {wc["multiple_of_plan"]:.1f}.</div>',
