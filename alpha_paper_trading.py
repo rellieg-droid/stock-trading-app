@@ -835,6 +835,15 @@ def pf_val(p: dict) -> float:
 # ── Risk / Reward ──
 from rr_tab import render_position_manager
 
+# —— יומן פסיכולוגי (SQLite נפרד - לא נוגע ב-paper_portfolio.json) ——
+import psych_journal as pj
+pj.initialize_application_database()
+PSYCH_EMOTION_HE = {
+    "רוגע": "Calm", "FOMO": "FOMO",
+    "מסחר נקמה": "Revenge Trading",
+    "פחד": "Fear", "חמדנות": "Greed",
+}
+
 
 def _rr_earnings_date(symbol: str):
     """next_earnings מחזיר (dd/mm/yyyy, ימים). המודול צריך date בלבד."""
@@ -5961,6 +5970,14 @@ with st.container(key="tabbody_trade"):
                     tv_ = si_ * cp_
                     st.markdown(f"**עלות: {sym}{tv_:,.2f}**")
                     nt_ = st.text_input("הערה:", placeholder="סיבה לעסקה")
+                    if "מכירה" in act:
+                        # שדות המודול הפסיכולוגי — מופיעים רק בסגירת עסקה, לא בקנייה.
+                        followed_plan_ui = st.radio(
+                            "עקבת אחרי תוכנית ה-ATR שלך במדויק?",
+                            ["כן", "לא"], horizontal=True, key="tr_followed_plan")
+                        emotion_ui = st.selectbox(
+                            "רגש עיקרי בעסקה:",
+                            list(PSYCH_EMOTION_HE.keys()), key="tr_emotion")
                     if st.button("✅ בצע", type="primary"):
                         p = st.session_state.pf
                         if "קנייה" in act:
@@ -6003,13 +6020,22 @@ with st.container(key="tabbody_trade"):
                                 p['positions'][ticker]['shares'] -= si_
                                 if p['positions'][ticker]['shares'] == 0:
                                     del p['positions'][ticker]
+                                _sell_date = datetime.now().strftime("%Y-%m-%d %H:%M")
                                 p['trades'].append({
-                                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                    "date": _sell_date,
                                     "symbol": ticker, "action": "SELL",
                                     "shares": si_, "price": cp_,
                                     "total": tv_, "pnl": round(pnl, 2), "note": nt_,
                                 })
                                 save_pf(p)
+                                try:
+                                    pj.log_trade_psychology(
+                                        trade_date=_sell_date, symbol=ticker, pnl=round(pnl, 2),
+                                        followed_plan=(followed_plan_ui == "כן"),
+                                        emotion=PSYCH_EMOTION_HE[emotion_ui],
+                                    )
+                                except Exception:
+                                    pass  # אי רישום ליומן הפסיכולוגי לא אמור לחסום סגירת העסקה עצמה
                                 st.success(f"{'✅' if pnl >= 0 else '❌'} P&L: {sym}{pnl:+.2f}")
                                 st.rerun()
                             else:
