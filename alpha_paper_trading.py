@@ -6062,6 +6062,43 @@ with st.container(key="tabbody_trade"):
 
     with tr_sub2:
             st.markdown("### 📊 יומן עסקאות")
+
+            # —— כרטיס משמעת — משימה 3 של המודול הפסיכולוגי ——
+            _dm = pj.calculate_trader_discipline_metrics()
+            if _dm.total_trades == 0:
+                st.markdown(
+                    '<div style="background:#161b22;border:1px solid #21262d;'
+                    'border-radius:12px;padding:14px 18px;margin-bottom:14px;'
+                    'direction:rtl;text-align:right;color:#8b949e;font-size:.8rem;">'
+                    '🧠 עדיין אין נתונים ביומן הפסיכולוגי — יופיע אחרי סגירה ראשונה של עסקה.'
+                    '</div>', unsafe_allow_html=True)
+            else:
+                _ds = _dm.discipline_score_pct
+                _dm_clr = "#3fb950" if _ds >= 80 else ("#d29922" if _ds >= 50 else "#f85149")
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid #21262d;'
+                    f'border-top:3px solid {_dm_clr};border-radius:12px;'
+                    f'padding:14px 18px;margin-bottom:14px;direction:rtl;">'
+                    f'<div style="display:flex;justify-content:space-between;'
+                    f'align-items:center;flex-wrap:wrap;gap:14px;">'
+                    f'<div style="text-align:right;">'
+                    f'<div style="color:#8b949e;font-size:.64rem;text-transform:uppercase;">'
+                    f'ציון משמעת (Discipline Score)</div>'
+                    f'<div style="font-family:JetBrains Mono,monospace;font-size:1.7rem;'
+                    f'font-weight:700;color:{_dm_clr};">{_ds:.0f}%</div>'
+                    f'<div style="color:#8b949e;font-size:.68rem;">'
+                    f'מתוך {_dm.total_trades} עסקאות שנרשמו ביומן</div>'
+                    f'</div>'
+                    f'<div style="text-align:right;">'
+                    f'<div style="color:#8b949e;font-size:.64rem;text-transform:uppercase;">'
+                    f'עלות רגשית כוללת</div>'
+                    f'<div style="font-family:JetBrains Mono,monospace;font-size:1.7rem;'
+                    f'font-weight:700;color:#f85149;">${_dm.total_emotional_loss_cost:,.0f}</div>'
+                    f'<div style="color:#8b949e;font-size:.68rem;">'
+                    f'ב-{_dm.emotional_loss_trade_count} עסקאות מפסידות לא לפי התוכנית/ברוגע</div>'
+                    f'</div>'
+                    f'</div></div>', unsafe_allow_html=True)
+
             trd = pf['trades']
             if trd:
                 dt = pd.DataFrame(trd)
