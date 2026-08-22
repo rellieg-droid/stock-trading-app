@@ -218,8 +218,10 @@ div[role="radiogroup"] label:hover p {
   color: var(--c-text-1) !important;
 }
 div[role="radiogroup"] input[type="radio"] { display: none !important; }
-div[role="radiogroup"] input:checked + div,
-div[role="radiogroup"] [data-testid="stMarkdownContainer"] { display: none !important; }
+/* הוסר הסלקטור השני שהיה מחובר בפסיק לכלל זה: הוא הסתיר את
+   טקסט כל אפשרות ה-radio בכל האפליקציה (בסתירה לעיצוב בשורות
+   201-219 ממש). נמשך רק input:checked + div שלא נראה שפוגע בתצוגה. */
+div[role="radiogroup"] input:checked + div { display: none !important; }
 
 /* ═══════════════════════════
    BUTTONS — Compact terminal style
