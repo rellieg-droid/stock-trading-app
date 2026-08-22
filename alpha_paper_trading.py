@@ -7335,16 +7335,28 @@ with st.container(key="tabbody_watchlist"):
     if 'watchlist' not in st.session_state:
         st.session_state.watchlist = [ticker]
 
-    wl1, wl2 = st.columns([4, 1])
-    with wl1:
-        wl_new = st.text_input("הוסיפי מניה לרשימה", placeholder="לדוג: GOOGL", key="wl_new").upper().strip()
-    with wl2:
-        st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
-        if st.button("➕ הוסף", key="wl_add", type="primary"):
-            if wl_new and wl_new not in st.session_state.watchlist:
-                st.session_state.watchlist.append(wl_new)
-                save_user_data()
-                st.rerun()
+    # Smart Search: אותה קומפוננטת st_searchbox + _header_search שכבר
+    # משמשת בכותרת העליונה. dropdown חי עם הצעות אמיתיות (סימול או שם
+    # חברה, כולל עברית וטיקרים ישראליים), במקום טקסט חופשי שיכול לקבל
+    # שם חברה שגוי כמו "apple" בטעות במקום "AAPL".
+    wl_picked = st_searchbox(
+        _header_search,
+        placeholder="🔍 סימול או שם חברה — AAPL, Tesla, טבע...",
+        key="wl_search_sb",
+        debounce=250,
+        clear_on_submit=True,
+    )
+    if wl_picked and wl_picked not in st.session_state.watchlist:
+        # בדיקת בטיחות נוספת: גם תוצאה שהוחזרה מהחיפוש עלולה להיכשל
+        # בפועל (סימול לא פעיל וכו), אז עדיין מוודאים לפני הוספה.
+        with st.spinner(f"בודקת ש-{wl_picked} סימול תקין..."):
+            _wl_check = load_ohlcv(wl_picked, "5d", "1d")
+        if _wl_check is None or len(_wl_check) == 0:
+            st.error(f"❌ לא נמצאו נתונים עבור {wl_picked} כרגע. נסי שוב עוד רגע.")
+        else:
+            st.session_state.watchlist.append(wl_picked)
+            save_user_data()
+            st.rerun()
 
     if st.button("🔄 רענן ציונות", key="wl_refresh"):
         st.rerun()
@@ -7379,15 +7391,24 @@ with st.container(key="tabbody_watchlist"):
                     ma50_wl = float(df_wl['MA50'].iloc[-1]) if 'MA50' in df_wl.columns else price_wl
                     trend_wl = "🟢 שורי" if price_wl > ma50_wl else "🔴 דובי"
 
-                    # rsi
-                    rsi_wl = float(df_wl['RSI'].iloc[-1]) if 'RSI' in df_wl.columns else 50
+                    # risk score - מבוסס ATR% (אותו החישוב שמשמש לסטופ בעסקות אמיתיות).
+                    # גבוה = בטוח יותר (עקבי ל-F/T), נמוך = תנודתיות גבוהה יותר.
+                    try:
+                        _atr_wl = true_atr(df_wl)
+                        _atr_pct_wl = (_atr_wl / price_wl * 100) if _atr_wl and price_wl else None
+                    except Exception:
+                        _atr_pct_wl = None
+                    if _atr_pct_wl is not None:
+                        risk_score_wl = max(0, min(100, round(100 - (_atr_pct_wl / 8 * 100))))
+                    else:
+                        risk_score_wl = None
 
                     wl_rows.append({
                         "sym":      sym_wl,
                         "name":     (inf_wl.get("shortName","") or "")[:18],
                         "price":    price_wl,
                         "chg":      chg_wl,
-                        "rsi":      rsi_wl,
+                        "risk_score": risk_score_wl,
                         "trend":    trend_wl,
                         "f_score":  f_wl.get("score"),
                         "t_score":  t_wl.get("score"),
@@ -7407,9 +7428,13 @@ with st.container(key="tabbody_watchlist"):
                 wcols = st.columns(3)
                 for j, r in enumerate(chunk):
                     chg_c = "#3fb950" if r["chg"] >= 0 else "#f85149"
-                    rsi_c = "#f85149" if r["rsi"] >= 70 else ("#3fb950" if r["rsi"] <= 30 else "#8b949e")
-                    bar_w = r["weighted"]
                     dec_c = r["dec_clr"]
+                    _f_val   = r["f_score"] if r["f_score"] is not None else 0
+                    _t_val   = r["t_score"] if r["t_score"] is not None else 0
+                    _rk_val  = r["risk_score"] if r["risk_score"] is not None else 0
+                    _f_lbl   = r["f_score"] if r["f_score"] is not None else "—"
+                    _t_lbl   = r["t_score"] if r["t_score"] is not None else "—"
+                    _rk_lbl  = r["risk_score"] if r["risk_score"] is not None else "—"
 
                     wcols[j].markdown(
                         f'<div style="background:#161b22;border:1px solid #21262d;'
@@ -7426,34 +7451,30 @@ with st.container(key="tabbody_watchlist"):
                         f'<div style="color:{chg_c};font-size:.72rem;font-weight:600;">{r["chg"]:+.2f}%</div>'
                         f'</div></div>'
 
-                        # scores row
-                        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;">'
-                        f'<div style="background:#0d1117;border-radius:6px;padding:5px;text-align:center;">'
-                        f'<div style="color:#8b949e;font-size:.55rem;text-transform:uppercase;">פונד׳</div>'
-                        f'<div style="font-family:JetBrains Mono,monospace;font-size:.78rem;color:#388bfd;">{r["f_score"] or "—"}</div>'
-                        f'</div>'
-                        f'<div style="background:#0d1117;border-radius:6px;padding:5px;text-align:center;">'
-                        f'<div style="color:#8b949e;font-size:.55rem;text-transform:uppercase;">טכני</div>'
-                        f'<div style="font-family:JetBrains Mono,monospace;font-size:.78rem;color:#3fb950;">{r["t_score"] or "—"}</div>'
-                        f'</div>'
-                        f'<div style="background:#0d1117;border-radius:6px;padding:5px;text-align:center;">'
-                        f'<div style="color:#8b949e;font-size:.55rem;text-transform:uppercase;">RSI</div>'
-                        f'<div style="font-family:JetBrains Mono,monospace;font-size:.78rem;color:{rsi_c};">{r["rsi"]:.0f}</div>'
-                        f'</div></div>'
+                        # 3 פסים אופקיים זעירים: Fundamental / Technical / Risk
+                        f'<div style="margin-bottom:4px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:.58rem;color:#8b949e;margin-bottom:2px;">'
+                        f'<span>פונדמנטלי (F)</span><span style="font-family:JetBrains Mono,monospace;color:#388bfd;">{_f_lbl}</span></div>'
+                        f'<div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden;">'
+                        f'<div style="height:100%;width:{_f_val}%;background:#388bfd;border-radius:2px;"></div></div></div>'
+                        f'<div style="margin-bottom:4px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:.58rem;color:#8b949e;margin-bottom:2px;">'
+                        f'<span>טכני (T)</span><span style="font-family:JetBrains Mono,monospace;color:#3fb950;">{_t_lbl}</span></div>'
+                        f'<div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden;">'
+                        f'<div style="height:100%;width:{_t_val}%;background:#3fb950;border-radius:2px;"></div></div></div>'
+                        f'<div style="margin-bottom:8px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:.58rem;color:#8b949e;margin-bottom:2px;">'
+                        f'<span>סיכון (R)</span><span style="font-family:JetBrains Mono,monospace;color:#f0883e;">{_rk_lbl}</span></div>'
+                        f'<div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden;">'
+                        f'<div style="height:100%;width:{_rk_val}%;background:#f0883e;border-radius:2px;"></div></div></div>'
 
                         # trend + decision
-                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">'
                         f'<span style="font-size:.72rem;">{r["trend"]}</span>'
                         f'<span style="background:{dec_c}22;color:{dec_c};border:1px solid {dec_c}55;'
                         f'border-radius:20px;padding:2px 8px;font-size:.68rem;font-weight:700;">'
                         f'{r["dec_icon"]} {r["decision"]}</span>'
                         f'</div>'
-
-                        # score bar
-                        f'<div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden;">'
-                        f'<div style="height:100%;width:{bar_w}%;background:{dec_c};border-radius:2px;"></div>'
-                        f'</div>'
-                        f'<div style="color:#8b949e;font-size:.6rem;text-align:center;margin-top:3px;">{bar_w}/100</div>'
                         f'</div>',
                         unsafe_allow_html=True
                     )
@@ -7462,6 +7483,9 @@ with st.container(key="tabbody_watchlist"):
                     if wcols[j].button(f"📈 פתח {r['sym']}", key=f"wl_open_{i}_{j}"):
                         st.session_state.ticker = r["sym"]
                         st.session_state.ai_res = None
+                        # מעביר גם את קבוצת הניווט העליונה (לא רק את הטיקר),
+                        # אחרת הטיקר היה מתחלף מתחת טאב ה-Watchlist בלי מעבר אליו.
+                        st.session_state.active_group = "גרף"
                         st.rerun()
 
             # Remove
