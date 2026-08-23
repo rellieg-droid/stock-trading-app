@@ -5106,6 +5106,272 @@ with st.container(key="tabbody_analysis"):
         else:
             st.error("לא ניתן לטעון נתונים. בחרי מניה תקינה.")
 
+    with an_sub2:
+        # ── API key status banner ──
+        if not ANTHROPIC_KEY:
+            st.markdown(
+                '<div style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);'
+                'border-radius:10px;padding:12px 16px;margin-bottom:12px;direction:rtl;">'
+                '<b style="color:#f85149;">⚠️ חסר API Key</b> — '
+                '<span style="color:#c9d1d9;font-size:.82rem;">ניתוח AI לא יעבוד עד שתוסיפי API Key של Anthropic.<br>'
+                'צרי קובץ: <code>.streamlit/secrets.toml</code><br>'
+                'הוסיפי שורה: <code>ANTHROPIC_API_KEY = "sk-ant-..."</code><br>'
+                'מפתח חינמי ב: <a href="https://console.anthropic.com" style="color:#388bfd;">console.anthropic.com</a>'
+                '</span></div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                '<div style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);'
+                'border-radius:8px;padding:7px 14px;margin-bottom:10px;direction:rtl;">'
+                '<span style="color:#3fb950;font-size:.78rem;">✅ API Key מחובר — ניתוח AI זמין</span>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+
+        st.markdown(
+            '<div style="direction:rtl;">'
+            '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">🤖 AI Analysis — ניתוח מלא מבוסס AI</div>'
+            '<div style="color:#8b949e;font-size:.78rem;margin-bottom:16px;">'
+            'ניתוח טכני, פונדמנטלי, סנטימנט ומאקרו — המערכת מאחדת את כל הנתונים למסקנה אחת</div>'
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+        if df is not None:
+            # ── Compute all scores ──
+            analyst_d_ai = load_analyst_data(ticker)
+            f_ai = calc_fundamental_score(info)
+            t_ai = calc_technical_score(df)
+            a_ai = calc_analyst_score({**analyst_d_ai, "cur_price": cp}) if analyst_d_ai else None
+            dec_ai = calc_weighted_decision(f_ai.get("score"), t_ai.get("score"),
+                                             a_ai.get("score") if a_ai else None)
+
+            gap_ai  = calc_gap_analysis(df)
+            sent_ai = calc_news_sentiment(ticker, info)
+            mac_ai  = calc_macro_score(info, df)
+            risk_ai = calc_risk_level(df, info, mac_ai)
+            conf_ai = calc_confidence_score(t_ai.get("score"), f_ai.get("score"),
+                                             a_ai.get("score") if a_ai else None,
+                                             sent_ai, mac_ai)
+            thesis_ai = build_thesis_data(ticker, info, df)
+
+            d_clr = dec_ai.get("color","#8b949e")
+            d_lbl = dec_ai.get("decision","—")
+            d_en  = dec_ai.get("en","—")
+            d_w   = dec_ai.get("weighted",0) or 0
+
+            # ══ SECTION 1: Final Verdict ══
+            drivers_ai = []
+            if (t_ai.get("score") or 0) >= 60: drivers_ai.append(f'ניתוח טכני חיובי — {t_ai.get("score")}/100')
+            if (f_ai.get("score") or 0) >= 60: drivers_ai.append(f'יסודות פיננסיים חזקים — {f_ai.get("score")}/100')
+            if sent_ai["score"] > 0.3:         drivers_ai.append(f'סנטימנט חיובי ({sent_ai["score"]:+.2f})')
+            if mac_ai["direction"] == "Bullish": drivers_ai.append(f'מאקרו תומך — {mac_ai["sector"]}')
+            if analyst_d_ai.get("rating") in ("Strong Buy","Buy"): drivers_ai.append(f'קונצנזוס אנליסטים: {analyst_d_ai["rating"]}')
+            if gap_ai["open_gaps"]:            drivers_ai.append(f'{len(gap_ai["open_gaps"])} Gaps פתוחים — אזורי תמיכה/התנגדות')
+            if (t_ai.get("score") or 0) < 40:  drivers_ai.append(f'ניתוח טכני חלש — {t_ai.get("score")}/100')
+            if risk_ai["level"] == "High":      drivers_ai.append(f'סיכון גבוה: {risk_ai["factors"][0] if risk_ai["factors"] else ""}')
+            if not drivers_ai:                  drivers_ai.append("נתונים מוגבלים — יש לבדוק ידנית")
+
+            drivers_html = "".join(
+                f'<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px solid #21262d;">'
+                f'<span style="color:{d_clr};font-size:.75rem;flex-shrink:0;">▸</span>'
+                f'<span style="color:#c9d1d9;font-size:.78rem;line-height:1.5;">{d}</span></div>'
+                for d in drivers_ai[:6]
+            )
+
+            st.markdown(
+                f'<div style="background:{d_clr}10;border:2px solid {d_clr}55;border-radius:16px;'
+                f'padding:22px 26px;margin-bottom:16px;direction:rtl;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
+                f'<div>'
+                f'<div style="color:#8b949e;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">המלצת AI סופית</div>'
+                f'<div style="font-size:2.2rem;font-weight:900;color:{d_clr};line-height:1;">{dec_ai.get("icon","⚪")} {d_lbl}</div>'
+                f'<div style="color:{d_clr};font-size:.85rem;font-weight:600;margin-top:2px;">{d_en}</div>'
+                f'</div>'
+                f'<div style="text-align:center;background:#0d1117;border-radius:12px;padding:14px 18px;">'
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:2.5rem;font-weight:900;color:{d_clr};line-height:1;">{d_w}</div>'
+                f'<div style="color:#8b949e;font-size:.64rem;margin-top:3px;">Confidence Score</div>'
+                f'<div style="color:{conf_ai["color"]};font-size:.72rem;font-weight:600;">{conf_ai["label"]}</div>'
+                f'</div></div>'
+                f'<div style="height:8px;background:#21262d;border-radius:4px;overflow:hidden;margin-bottom:4px;">'
+                f'<div style="height:100%;width:{d_w}%;background:linear-gradient(90deg,{d_clr}88,{d_clr});border-radius:4px;"></div>'
+                f'</div>'
+                f'<div style="display:flex;justify-content:space-between;margin-bottom:14px;">'
+                f'<span style="color:#8b949e;font-size:.6rem;">0 — מכירה ברורה</span>'
+                f'<span style="color:#8b949e;font-size:.6rem;">100 — קנייה ברורה</span>'
+                f'</div>'
+                f'<div style="color:#8b949e;font-size:.7rem;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Key Drivers</div>'
+                + drivers_html +
+                f'<div style="color:#8b949e;font-size:.62rem;margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">'
+                f'⚠️ ניתוח אלגוריתמי בלבד — אינו ייעוץ השקעות. לפני כל החלטה התייעצי עם בעל רישיון.</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+            # ══ SECTION 2: 4-way analysis dashboard ══
+            c1, c2, c3, c4 = st.columns(4)
+
+            def score_gauge(score, label, color):
+                if score is None: return f'<div style="color:#8b949e;font-size:.75rem;">{label}: N/A</div>'
+                w = score
+                return (
+                    f'<div style="background:#161b22;border:1px solid #21262d;border-top:2px solid {color};'
+                    f'border-radius:10px;padding:12px;text-align:center;">'
+                    f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;margin-bottom:4px;">{label}</div>'
+                    f'<div style="font-family:JetBrains Mono,monospace;font-size:1.3rem;font-weight:700;color:{color};">{score}</div>'
+                    f'<div style="height:4px;background:#21262d;border-radius:2px;margin-top:6px;overflow:hidden;">'
+                    f'<div style="height:100%;width:{w}%;background:{color};border-radius:2px;"></div>'
+                    f'</div></div>'
+                )
+
+            c1.markdown(score_gauge(f_ai.get("score"), "ניתוח פונדמנטלי", "#388bfd"), unsafe_allow_html=True)
+            c2.markdown(score_gauge(t_ai.get("score"), "ניתוח טכני", "#3fb950"), unsafe_allow_html=True)
+            c3.markdown(score_gauge(a_ai.get("score") if a_ai else None, "ניתוח אנליסטים", "#d29922"), unsafe_allow_html=True)
+            sent_c = "#3fb950" if sent_ai["score"]>0.2 else ("#f85149" if sent_ai["score"]<-0.2 else "#d29922")
+            c4.markdown(score_gauge(int((sent_ai["score"]+1)*50), "ניתוח סנטימנט", sent_c), unsafe_allow_html=True)
+
+            st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
+
+            # ══ SECTION 3: Risk + Macro + Gaps ══
+            col_x, col_y = st.columns([1, 1])
+            with col_x:
+                # Risk breakdown
+                risk_clr = risk_ai["color"]
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid #21262d;border-right:3px solid {risk_clr};'
+                    f'border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                    f'<div style="font-size:.82rem;font-weight:700;color:#e6edf3;">⚠️ סיכון עסקה</div>'
+                    f'<div style="font-size:1.0rem;font-weight:700;color:{risk_clr};">{risk_ai["icon"]} {risk_ai["level"]}</div>'
+                    f'</div>'
+                    + "".join(
+                        f'<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #21262d;">'
+                        f'<span style="color:{risk_clr};font-size:.7rem;">▸</span>'
+                        f'<span style="color:#c9d1d9;font-size:.75rem;">{f}</span></div>'
+                        for f in risk_ai["factors"]
+                    ) +
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+                # Macro
+                mac_clr = "#3fb950" if mac_ai["direction"]=="Bullish" else ("#f85149" if mac_ai["direction"]=="Bearish" else "#d29922")
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px 16px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                    f'<div style="font-size:.82rem;font-weight:700;color:#e6edf3;">🌍 מאקרו</div>'
+                    f'<div style="background:{mac_clr}22;color:{mac_clr};border:1px solid {mac_clr}55;'
+                    f'border-radius:20px;padding:2px 10px;font-size:.7rem;font-weight:700;">{mac_ai["direction"]}</div>'
+                    f'</div>'
+                    + "".join(
+                        f'<div style="color:#8b949e;font-size:.73rem;padding:2px 0;border-bottom:1px solid #21262d;">▸ {f}</div>'
+                        for f in mac_ai["factors"]
+                    ) +
+                    f'<div style="color:#8b949e;font-size:.62rem;margin-top:6px;">סקטור: {mac_ai["sector"]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            with col_y:
+                # Thesis summary
+                CASE_C = {"bull":("#3fb950","📈"),"base":("#d29922","↔️"),"bear":("#f85149","📉")}
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
+                    f'padding:14px 16px;margin-bottom:10px;">'
+                    f'<div style="font-size:.82rem;font-weight:700;color:#e6edf3;margin-bottom:6px;">🧭 Investment Thesis</div>'
+                    f'<div style="color:#c9d1d9;font-size:.75rem;line-height:1.6;margin-bottom:10px;">{thesis_ai.get("summary","")}</div>',
+                    unsafe_allow_html=True
+                )
+                for key in ["bull","base","bear"]:
+                    case = thesis_ai.get(key, {})
+                    clr, ico = CASE_C[key]
+                    pts = case.get("points", [])
+                    st.markdown(
+                        f'<div style="background:{clr}0d;border:1px solid {clr}33;border-radius:8px;'
+                        f'padding:8px 11px;margin-bottom:5px;">'
+                        f'<div style="color:{clr};font-size:.73rem;font-weight:700;margin-bottom:3px;">{ico} {case.get("title",key)}</div>'
+                        + "".join(f'<div style="color:#8b949e;font-size:.7rem;line-height:1.5;">• {p}</div>' for p in pts[:2])
+                        + f'<div style="color:{clr};font-family:JetBrains Mono,monospace;font-size:.7rem;margin-top:3px;">יעד: {case.get("target","N/A")}</div>'
+                        + f'</div>',
+                        unsafe_allow_html=True
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # ══ SECTION 4: AI Insight (Claude) ══
+            st.markdown('<hr style="margin:14px 0 10px;"/>', unsafe_allow_html=True)
+            st.markdown(
+                '<div style="font-size:.85rem;font-weight:700;color:#e6edf3;margin-bottom:6px;">'
+                '🤖 ניתוח AI מפורט (Claude)</div>',
+                unsafe_allow_html=True
+            )
+            if st.button("▶ הפעל ניתוח AI מלא", key="ai_full_btn", type="primary",
+                         help="שולח את כל נתוני המניה ל-Claude לניתוח מעמיק בשפה פשוטה"):
+                with st.spinner("Claude מנתח את המניה..."):
+                    try:
+                        rsi_ai  = float(df['RSI'].iloc[-1]) if 'RSI' in df.columns else 50
+                        ma200_v = float(df['MA200'].iloc[-1]) if 'MA200' in df.columns else cp
+                        macd_v  = float(df['MACD'].iloc[-1])   if 'MACD' in df.columns else 0
+                        pe_v    = info.get('trailingPE','N/A')
+                        rev_g_v = f"{(info.get('revenueGrowth',0) or 0)*100:.1f}%"
+                        prompt = (
+                            f"You are a senior financial analyst. Analyze {ticker} comprehensively.\n"
+                            f"Data: Price={sym}{cp:.2f}, RSI={rsi_ai:.0f}, "
+                            f"{'above' if cp>ma200_v else 'below'} MA200({sym}{ma200_v:.2f}), "
+                            f"MACD={'positive' if macd_v>0 else 'negative'}, "
+                            f"P/E={pe_v}, Revenue Growth={rev_g_v}, "
+                            f"Fundamental Score={f_ai.get('score','N/A')}/100, "
+                            f"Technical Score={t_ai.get('score','N/A')}/100, "
+                            f"Analyst Rating={analyst_d_ai.get('rating','N/A')}, "
+                            f"Risk Level={risk_ai['level']}, "
+                            f"Open Gaps={len(gap_ai['open_gaps'])}, "
+                            f"Sentiment={sent_ai['label']} ({sent_ai['score']:+.2f}).\n"
+                            f"Respond ONLY in Hebrew. Write 4 clear sections:\n"
+                            f"1. **מצב המניה כיום** (2-3 משפטים)\n"
+                            f"2. **חוזקות עיקריות** (3 נקודות)\n"
+                            f"3. **סיכונים וחולשות** (3 נקודות)\n"
+                            f"4. **מסקנה ומה לעקוב** (2-3 משפטים)\n"
+                            f"Be specific, professional, and accessible to non-experts."
+                        )
+                        resp = requests.post(
+                            "https://api.anthropic.com/v1/messages",
+                            headers=ai_headers(),
+                            json={"model": "claude-sonnet-4-20250514", "max_tokens": 800,
+                                  "messages": [{"role": "user", "content": prompt}]},
+                            timeout=30
+                        )
+                        if resp.status_code == 200:
+                            ai_text = resp.json()['content'][0]['text'].strip()
+                            st.session_state['ai_full_result'] = ai_text
+                        else:
+                            st.session_state['ai_full_result'] = f"שגיאה: {resp.status_code}"
+                    except Exception as e:
+                        st.session_state['ai_full_result'] = f"שגיאה: {e}"
+
+            if st.session_state.get('ai_full_result'):
+                ai_txt = st.session_state['ai_full_result']
+                st.markdown(
+                    f'<div style="background:#161b22;border:1px solid #1f6feb;border-radius:12px;'
+                    f'padding:18px 22px;direction:rtl;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
+                    f'<span style="background:linear-gradient(135deg,#6e40c9,#1f6feb);color:white;'
+                    f'border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700;">AI</span>'
+                    f'<span style="font-size:.85rem;font-weight:700;color:#e6edf3;">ניתוח Claude — {ticker}</span>'
+                    f'</div>'
+                    f'<div style="color:#c9d1d9;font-size:.83rem;line-height:1.8;white-space:pre-wrap;">{ai_txt}</div>'
+                    f'<div style="color:#8b949e;font-size:.62rem;margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">'
+                    f'⚠️ ניתוח AI בלבד — אינו ייעוץ השקעות מוסמך.</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+        else:
+            st.error("לא ניתן לטעון נתונים. בחרי מניה תקינה.")
+
+
+    # ════════════════════════════════════════
+    # TAB 9 — השוואת מניות
+    # ════════════════════════════════════════
+
     with an_sub3:
         # ── Pattern Chart — Expansion / Contraction / Breakout ──
 
@@ -6381,272 +6647,6 @@ with st.container(key="tabbody_guide"):
 # ════════════════════════════════════════
 # TAB 8 — AI ניתוח
 # ════════════════════════════════════════
-    with an_sub2:
-        # ── API key status banner ──
-        if not ANTHROPIC_KEY:
-            st.markdown(
-                '<div style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.4);'
-                'border-radius:10px;padding:12px 16px;margin-bottom:12px;direction:rtl;">'
-                '<b style="color:#f85149;">⚠️ חסר API Key</b> — '
-                '<span style="color:#c9d1d9;font-size:.82rem;">ניתוח AI לא יעבוד עד שתוסיפי API Key של Anthropic.<br>'
-                'צרי קובץ: <code>.streamlit/secrets.toml</code><br>'
-                'הוסיפי שורה: <code>ANTHROPIC_API_KEY = "sk-ant-..."</code><br>'
-                'מפתח חינמי ב: <a href="https://console.anthropic.com" style="color:#388bfd;">console.anthropic.com</a>'
-                '</span></div>',
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown(
-                '<div style="background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);'
-                'border-radius:8px;padding:7px 14px;margin-bottom:10px;direction:rtl;">'
-                '<span style="color:#3fb950;font-size:.78rem;">✅ API Key מחובר — ניתוח AI זמין</span>'
-                '</div>',
-                unsafe_allow_html=True
-            )
-
-        st.markdown(
-            '<div style="direction:rtl;">'
-            '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">🤖 AI Analysis — ניתוח מלא מבוסס AI</div>'
-            '<div style="color:#8b949e;font-size:.78rem;margin-bottom:16px;">'
-            'ניתוח טכני, פונדמנטלי, סנטימנט ומאקרו — המערכת מאחדת את כל הנתונים למסקנה אחת</div>'
-            '</div>',
-            unsafe_allow_html=True
-        )
-
-        if df is not None:
-            # ── Compute all scores ──
-            analyst_d_ai = load_analyst_data(ticker)
-            f_ai = calc_fundamental_score(info)
-            t_ai = calc_technical_score(df)
-            a_ai = calc_analyst_score({**analyst_d_ai, "cur_price": cp}) if analyst_d_ai else None
-            dec_ai = calc_weighted_decision(f_ai.get("score"), t_ai.get("score"),
-                                             a_ai.get("score") if a_ai else None)
-
-            gap_ai  = calc_gap_analysis(df)
-            sent_ai = calc_news_sentiment(ticker, info)
-            mac_ai  = calc_macro_score(info, df)
-            risk_ai = calc_risk_level(df, info, mac_ai)
-            conf_ai = calc_confidence_score(t_ai.get("score"), f_ai.get("score"),
-                                             a_ai.get("score") if a_ai else None,
-                                             sent_ai, mac_ai)
-            thesis_ai = build_thesis_data(ticker, info, df)
-
-            d_clr = dec_ai.get("color","#8b949e")
-            d_lbl = dec_ai.get("decision","—")
-            d_en  = dec_ai.get("en","—")
-            d_w   = dec_ai.get("weighted",0) or 0
-
-            # ══ SECTION 1: Final Verdict ══
-            drivers_ai = []
-            if (t_ai.get("score") or 0) >= 60: drivers_ai.append(f'ניתוח טכני חיובי — {t_ai.get("score")}/100')
-            if (f_ai.get("score") or 0) >= 60: drivers_ai.append(f'יסודות פיננסיים חזקים — {f_ai.get("score")}/100')
-            if sent_ai["score"] > 0.3:         drivers_ai.append(f'סנטימנט חיובי ({sent_ai["score"]:+.2f})')
-            if mac_ai["direction"] == "Bullish": drivers_ai.append(f'מאקרו תומך — {mac_ai["sector"]}')
-            if analyst_d_ai.get("rating") in ("Strong Buy","Buy"): drivers_ai.append(f'קונצנזוס אנליסטים: {analyst_d_ai["rating"]}')
-            if gap_ai["open_gaps"]:            drivers_ai.append(f'{len(gap_ai["open_gaps"])} Gaps פתוחים — אזורי תמיכה/התנגדות')
-            if (t_ai.get("score") or 0) < 40:  drivers_ai.append(f'ניתוח טכני חלש — {t_ai.get("score")}/100')
-            if risk_ai["level"] == "High":      drivers_ai.append(f'סיכון גבוה: {risk_ai["factors"][0] if risk_ai["factors"] else ""}')
-            if not drivers_ai:                  drivers_ai.append("נתונים מוגבלים — יש לבדוק ידנית")
-
-            drivers_html = "".join(
-                f'<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 0;border-bottom:1px solid #21262d;">'
-                f'<span style="color:{d_clr};font-size:.75rem;flex-shrink:0;">▸</span>'
-                f'<span style="color:#c9d1d9;font-size:.78rem;line-height:1.5;">{d}</span></div>'
-                for d in drivers_ai[:6]
-            )
-
-            st.markdown(
-                f'<div style="background:{d_clr}10;border:2px solid {d_clr}55;border-radius:16px;'
-                f'padding:22px 26px;margin-bottom:16px;direction:rtl;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">'
-                f'<div>'
-                f'<div style="color:#8b949e;font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;">המלצת AI סופית</div>'
-                f'<div style="font-size:2.2rem;font-weight:900;color:{d_clr};line-height:1;">{dec_ai.get("icon","⚪")} {d_lbl}</div>'
-                f'<div style="color:{d_clr};font-size:.85rem;font-weight:600;margin-top:2px;">{d_en}</div>'
-                f'</div>'
-                f'<div style="text-align:center;background:#0d1117;border-radius:12px;padding:14px 18px;">'
-                f'<div style="font-family:JetBrains Mono,monospace;font-size:2.5rem;font-weight:900;color:{d_clr};line-height:1;">{d_w}</div>'
-                f'<div style="color:#8b949e;font-size:.64rem;margin-top:3px;">Confidence Score</div>'
-                f'<div style="color:{conf_ai["color"]};font-size:.72rem;font-weight:600;">{conf_ai["label"]}</div>'
-                f'</div></div>'
-                f'<div style="height:8px;background:#21262d;border-radius:4px;overflow:hidden;margin-bottom:4px;">'
-                f'<div style="height:100%;width:{d_w}%;background:linear-gradient(90deg,{d_clr}88,{d_clr});border-radius:4px;"></div>'
-                f'</div>'
-                f'<div style="display:flex;justify-content:space-between;margin-bottom:14px;">'
-                f'<span style="color:#8b949e;font-size:.6rem;">0 — מכירה ברורה</span>'
-                f'<span style="color:#8b949e;font-size:.6rem;">100 — קנייה ברורה</span>'
-                f'</div>'
-                f'<div style="color:#8b949e;font-size:.7rem;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Key Drivers</div>'
-                + drivers_html +
-                f'<div style="color:#8b949e;font-size:.62rem;margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">'
-                f'⚠️ ניתוח אלגוריתמי בלבד — אינו ייעוץ השקעות. לפני כל החלטה התייעצי עם בעל רישיון.</div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
-            # ══ SECTION 2: 4-way analysis dashboard ══
-            c1, c2, c3, c4 = st.columns(4)
-
-            def score_gauge(score, label, color):
-                if score is None: return f'<div style="color:#8b949e;font-size:.75rem;">{label}: N/A</div>'
-                w = score
-                return (
-                    f'<div style="background:#161b22;border:1px solid #21262d;border-top:2px solid {color};'
-                    f'border-radius:10px;padding:12px;text-align:center;">'
-                    f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;margin-bottom:4px;">{label}</div>'
-                    f'<div style="font-family:JetBrains Mono,monospace;font-size:1.3rem;font-weight:700;color:{color};">{score}</div>'
-                    f'<div style="height:4px;background:#21262d;border-radius:2px;margin-top:6px;overflow:hidden;">'
-                    f'<div style="height:100%;width:{w}%;background:{color};border-radius:2px;"></div>'
-                    f'</div></div>'
-                )
-
-            c1.markdown(score_gauge(f_ai.get("score"), "ניתוח פונדמנטלי", "#388bfd"), unsafe_allow_html=True)
-            c2.markdown(score_gauge(t_ai.get("score"), "ניתוח טכני", "#3fb950"), unsafe_allow_html=True)
-            c3.markdown(score_gauge(a_ai.get("score") if a_ai else None, "ניתוח אנליסטים", "#d29922"), unsafe_allow_html=True)
-            sent_c = "#3fb950" if sent_ai["score"]>0.2 else ("#f85149" if sent_ai["score"]<-0.2 else "#d29922")
-            c4.markdown(score_gauge(int((sent_ai["score"]+1)*50), "ניתוח סנטימנט", sent_c), unsafe_allow_html=True)
-
-            st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
-
-            # ══ SECTION 3: Risk + Macro + Gaps ══
-            col_x, col_y = st.columns([1, 1])
-            with col_x:
-                # Risk breakdown
-                risk_clr = risk_ai["color"]
-                st.markdown(
-                    f'<div style="background:#161b22;border:1px solid #21262d;border-right:3px solid {risk_clr};'
-                    f'border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
-                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-                    f'<div style="font-size:.82rem;font-weight:700;color:#e6edf3;">⚠️ סיכון עסקה</div>'
-                    f'<div style="font-size:1.0rem;font-weight:700;color:{risk_clr};">{risk_ai["icon"]} {risk_ai["level"]}</div>'
-                    f'</div>'
-                    + "".join(
-                        f'<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #21262d;">'
-                        f'<span style="color:{risk_clr};font-size:.7rem;">▸</span>'
-                        f'<span style="color:#c9d1d9;font-size:.75rem;">{f}</span></div>'
-                        for f in risk_ai["factors"]
-                    ) +
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-
-                # Macro
-                mac_clr = "#3fb950" if mac_ai["direction"]=="Bullish" else ("#f85149" if mac_ai["direction"]=="Bearish" else "#d29922")
-                st.markdown(
-                    f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;padding:14px 16px;">'
-                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-                    f'<div style="font-size:.82rem;font-weight:700;color:#e6edf3;">🌍 מאקרו</div>'
-                    f'<div style="background:{mac_clr}22;color:{mac_clr};border:1px solid {mac_clr}55;'
-                    f'border-radius:20px;padding:2px 10px;font-size:.7rem;font-weight:700;">{mac_ai["direction"]}</div>'
-                    f'</div>'
-                    + "".join(
-                        f'<div style="color:#8b949e;font-size:.73rem;padding:2px 0;border-bottom:1px solid #21262d;">▸ {f}</div>'
-                        for f in mac_ai["factors"]
-                    ) +
-                    f'<div style="color:#8b949e;font-size:.62rem;margin-top:6px;">סקטור: {mac_ai["sector"]}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-
-            with col_y:
-                # Thesis summary
-                CASE_C = {"bull":("#3fb950","📈"),"base":("#d29922","↔️"),"bear":("#f85149","📉")}
-                st.markdown(
-                    f'<div style="background:#161b22;border:1px solid #21262d;border-radius:12px;'
-                    f'padding:14px 16px;margin-bottom:10px;">'
-                    f'<div style="font-size:.82rem;font-weight:700;color:#e6edf3;margin-bottom:6px;">🧭 Investment Thesis</div>'
-                    f'<div style="color:#c9d1d9;font-size:.75rem;line-height:1.6;margin-bottom:10px;">{thesis_ai.get("summary","")}</div>',
-                    unsafe_allow_html=True
-                )
-                for key in ["bull","base","bear"]:
-                    case = thesis_ai.get(key, {})
-                    clr, ico = CASE_C[key]
-                    pts = case.get("points", [])
-                    st.markdown(
-                        f'<div style="background:{clr}0d;border:1px solid {clr}33;border-radius:8px;'
-                        f'padding:8px 11px;margin-bottom:5px;">'
-                        f'<div style="color:{clr};font-size:.73rem;font-weight:700;margin-bottom:3px;">{ico} {case.get("title",key)}</div>'
-                        + "".join(f'<div style="color:#8b949e;font-size:.7rem;line-height:1.5;">• {p}</div>' for p in pts[:2])
-                        + f'<div style="color:{clr};font-family:JetBrains Mono,monospace;font-size:.7rem;margin-top:3px;">יעד: {case.get("target","N/A")}</div>'
-                        + f'</div>',
-                        unsafe_allow_html=True
-                    )
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            # ══ SECTION 4: AI Insight (Claude) ══
-            st.markdown('<hr style="margin:14px 0 10px;"/>', unsafe_allow_html=True)
-            st.markdown(
-                '<div style="font-size:.85rem;font-weight:700;color:#e6edf3;margin-bottom:6px;">'
-                '🤖 ניתוח AI מפורט (Claude)</div>',
-                unsafe_allow_html=True
-            )
-            if st.button("▶ הפעל ניתוח AI מלא", key="ai_full_btn", type="primary",
-                         help="שולח את כל נתוני המניה ל-Claude לניתוח מעמיק בשפה פשוטה"):
-                with st.spinner("Claude מנתח את המניה..."):
-                    try:
-                        rsi_ai  = float(df['RSI'].iloc[-1]) if 'RSI' in df.columns else 50
-                        ma200_v = float(df['MA200'].iloc[-1]) if 'MA200' in df.columns else cp
-                        macd_v  = float(df['MACD'].iloc[-1])   if 'MACD' in df.columns else 0
-                        pe_v    = info.get('trailingPE','N/A')
-                        rev_g_v = f"{(info.get('revenueGrowth',0) or 0)*100:.1f}%"
-                        prompt = (
-                            f"You are a senior financial analyst. Analyze {ticker} comprehensively.\n"
-                            f"Data: Price={sym}{cp:.2f}, RSI={rsi_ai:.0f}, "
-                            f"{'above' if cp>ma200_v else 'below'} MA200({sym}{ma200_v:.2f}), "
-                            f"MACD={'positive' if macd_v>0 else 'negative'}, "
-                            f"P/E={pe_v}, Revenue Growth={rev_g_v}, "
-                            f"Fundamental Score={f_ai.get('score','N/A')}/100, "
-                            f"Technical Score={t_ai.get('score','N/A')}/100, "
-                            f"Analyst Rating={analyst_d_ai.get('rating','N/A')}, "
-                            f"Risk Level={risk_ai['level']}, "
-                            f"Open Gaps={len(gap_ai['open_gaps'])}, "
-                            f"Sentiment={sent_ai['label']} ({sent_ai['score']:+.2f}).\n"
-                            f"Respond ONLY in Hebrew. Write 4 clear sections:\n"
-                            f"1. **מצב המניה כיום** (2-3 משפטים)\n"
-                            f"2. **חוזקות עיקריות** (3 נקודות)\n"
-                            f"3. **סיכונים וחולשות** (3 נקודות)\n"
-                            f"4. **מסקנה ומה לעקוב** (2-3 משפטים)\n"
-                            f"Be specific, professional, and accessible to non-experts."
-                        )
-                        resp = requests.post(
-                            "https://api.anthropic.com/v1/messages",
-                            headers=ai_headers(),
-                            json={"model": "claude-sonnet-4-20250514", "max_tokens": 800,
-                                  "messages": [{"role": "user", "content": prompt}]},
-                            timeout=30
-                        )
-                        if resp.status_code == 200:
-                            ai_text = resp.json()['content'][0]['text'].strip()
-                            st.session_state['ai_full_result'] = ai_text
-                        else:
-                            st.session_state['ai_full_result'] = f"שגיאה: {resp.status_code}"
-                    except Exception as e:
-                        st.session_state['ai_full_result'] = f"שגיאה: {e}"
-
-            if st.session_state.get('ai_full_result'):
-                ai_txt = st.session_state['ai_full_result']
-                st.markdown(
-                    f'<div style="background:#161b22;border:1px solid #1f6feb;border-radius:12px;'
-                    f'padding:18px 22px;direction:rtl;">'
-                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'
-                    f'<span style="background:linear-gradient(135deg,#6e40c9,#1f6feb);color:white;'
-                    f'border-radius:4px;padding:1px 7px;font-size:.62rem;font-weight:700;">AI</span>'
-                    f'<span style="font-size:.85rem;font-weight:700;color:#e6edf3;">ניתוח Claude — {ticker}</span>'
-                    f'</div>'
-                    f'<div style="color:#c9d1d9;font-size:.83rem;line-height:1.8;white-space:pre-wrap;">{ai_txt}</div>'
-                    f'<div style="color:#8b949e;font-size:.62rem;margin-top:10px;padding-top:8px;border-top:1px solid #21262d;">'
-                    f'⚠️ ניתוח AI בלבד — אינו ייעוץ השקעות מוסמך.</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-        else:
-            st.error("לא ניתן לטעון נתונים. בחרי מניה תקינה.")
-
-
-    # ════════════════════════════════════════
-    # TAB 9 — השוואת מניות
-    # ════════════════════════════════════════
-
 with st.container(key="tabbody_compare"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
