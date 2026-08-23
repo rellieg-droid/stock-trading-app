@@ -2348,7 +2348,7 @@ if df is None:
     _esc_cols = st.columns(7)
     for _esc_sym, _esc_col in zip(["AAPL", "TSLA", "MSFT", "GOOGL", "NVDA", "TEVA", "CHKP.TA"], _esc_cols):
         with _esc_col:
-            if st.button(_esc_sym, key=f"esc_{_esc_sym}", use_container_width=True):
+            if st.button(_esc_sym, key=f"esc_{_esc_sym}", width="stretch"):
                 st.session_state.ticker = _esc_sym
                 st.rerun()
     st.stop()
@@ -2595,7 +2595,7 @@ def render_top_nav(active_group):
             with cols[i]:
                 is_active = (group == active_group)
                 if st.button(GROUP_BOTTOM_ICONS[group], key=f"nav_{group}",
-                             use_container_width=True,
+                             width="stretch",
                              help=GROUP_TOOLTIPS.get(group, group),
                              type="primary" if is_active else "secondary"):
                     st.session_state.active_group = group
@@ -2783,7 +2783,7 @@ with st.container(key="tabbody_home"):
     for _i, _mc in enumerate(_main_cats):
         if _mc_cols[_i].button(_mc, key=f"hmc_{_i}",
                                 type="primary" if _mc==st.session_state.home_main_cat else "secondary",
-                                use_container_width=True):
+                                width="stretch"):
             st.session_state.home_main_cat = _mc
             st.session_state.home_sub_cat  = HOME_SUBS[_mc][0]
             st.rerun()
@@ -2797,7 +2797,7 @@ with st.container(key="tabbody_home"):
     for _i2, _sc in enumerate(_subs):
         if _sc_cols[_i2].button(_sc, key=f"hsc_{_i2}_{st.session_state.home_main_cat}",
                                  type="primary" if _sc==st.session_state.home_sub_cat else "secondary",
-                                 use_container_width=True):
+                                 width="stretch"):
             st.session_state.home_sub_cat = _sc
             st.rerun()
 
@@ -2855,7 +2855,7 @@ with st.container(key="tabbody_home"):
                 _is_cur2 = _bsym2==st.session_state.ticker or _bsym2+".TA"==st.session_state.ticker
                 if _bcols[_bi2].button(_bsym2, key=f"{btn_key}_{_bi2}_{_bsym2}",
                                         type="primary" if _is_cur2 else "secondary",
-                                        use_container_width=True):
+                                        width="stretch"):
                     st.session_state.ticker  = _bsym2
                     st.session_state.ai_res  = None
                     if _bsym2 not in st.session_state.recent:
@@ -2955,7 +2955,7 @@ with st.container(key="tabbody_home"):
                     title=dict(text=f"נפח מסחר לפי שעה",font=dict(size=11,color="rgba(255,255,255,0.3)"),x=1,xanchor="right"),
                     xaxis=dict(showgrid=False,showticklabels=False,zeroline=False),
                     yaxis=dict(showgrid=True,gridcolor="rgba(255,255,255,0.04)",showticklabels=False,zeroline=False))
-                st.plotly_chart(_fig_v,use_container_width=True)
+                st.plotly_chart(_fig_v,width="stretch")
         except: pass
 
     with _b2:
@@ -3054,14 +3054,14 @@ with st.container(key="tabbody_chart"):
         _i = 0
 
         with _tb_cols[_i]:
-            with st.popover("⚙ ⌄", use_container_width=True):
+            with st.popover("⚙ ⌄", width="stretch"):
                 st.caption("הגדרות תצוגה נוספות")
                 st.caption("(מקום שמור להרחבות עתידיות)")
         _i += 1
 
         for _pk in _periods_list:
             with _tb_cols[_i]:
-                if st.button(_pk, key=f"period_{_pk}", use_container_width=True,
+                if st.button(_pk, key=f"period_{_pk}", width="stretch",
                              type="primary" if _pk == _cur_period else "secondary"):
                     st.session_state.period = _pk
                     st.rerun()
@@ -3069,7 +3069,7 @@ with st.container(key="tabbody_chart"):
 
         for _cval, _clab in _ct_opts:
             with _tb_cols[_i]:
-                if st.button(_clab, key=f"ct_{_cval}", use_container_width=True,
+                if st.button(_clab, key=f"ct_{_cval}", width="stretch",
                              type="primary" if st.session_state.ct == _cval else "secondary"):
                     st.session_state.ct = _cval
                     st.rerun()
@@ -3078,7 +3078,7 @@ with st.container(key="tabbody_chart"):
         with _tb_cols[_i]:
             _an_on = st.session_state.show_an
             if st.button("DATA" + ("●" if _an_on else ""), key="aan",
-                         use_container_width=True,
+                         width="stretch",
                          type="primary" if _an_on else "secondary"):
                 st.session_state.show_an = not _an_on; st.rerun()
         _i += 1
@@ -3086,7 +3086,7 @@ with st.container(key="tabbody_chart"):
         with _tb_cols[_i]:
             _ai_on = st.session_state.show_ai
             if st.button("AI" + ("●" if _ai_on else ""), key="aai",
-                         use_container_width=True,
+                         width="stretch",
                          type="primary" if _ai_on else "secondary"):
                 st.session_state.show_ai = not _ai_on
                 if st.session_state.show_ai and st.session_state.ai_res is None:
@@ -3135,7 +3135,7 @@ with st.container(key="tabbody_chart"):
         _i += 1
 
         with _tb_cols[_i]:
-            if st.button("↺", key="arst", use_container_width=True):
+            if st.button("↺", key="arst", width="stretch"):
                 st.session_state.period   = "1Y"
                 st.session_state.ct       = "line"
                 st.session_state.show_an  = False
@@ -3464,7 +3464,7 @@ with st.container(key="tabbody_chart"):
         xaxis3=dict(**axis_s, **spike_x),
         yaxis3=dict(**axis_s, **spike_y, side='right'),
     )
-    st.plotly_chart(fig, use_container_width=True,
+    st.plotly_chart(fig, width="stretch",
                     config={"scrollZoom": True, "displayModeBar": True,
                             "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
 
@@ -3513,7 +3513,7 @@ with st.container(key="tabbody_chart"):
             yaxis=dict(gridcolor=GR, zeroline=False, color='#8b949e',
                        side='right', range=[0, 100], showgrid=True),
         )
-        st.plotly_chart(fig_r, use_container_width=True)
+        st.plotly_chart(fig_r, width="stretch")
 
     # ── נתוני שוק (מתחת לגרף) ──
     st.markdown('<hr style="margin:12px 0 8px;"/>', unsafe_allow_html=True)
@@ -5321,7 +5321,7 @@ with st.container(key="tabbody_analysis"):
                 fig_pat.update_xaxes(showspikes=False)
                 fig_pat.update_yaxes(showspikes=False)
 
-                st.plotly_chart(fig_pat, use_container_width=True)
+                st.plotly_chart(fig_pat, width="stretch")
 
                 # Legend
                 st.markdown(
@@ -5763,7 +5763,7 @@ with st.container(key="tabbody_backtest"):
                         font=dict(size=11, color='#c9d1d9')),
             title=dict(text=f"ביצועים מצטברים — {ticker}", font=dict(size=13, color='#c9d1d9'))
         )
-        st.plotly_chart(fb, use_container_width=True)
+        st.plotly_chart(fb, width="stretch")
 
         # ── גרף Drawdown ──
         fig_dd = go.Figure()
@@ -5785,7 +5785,7 @@ with st.container(key="tabbody_backtest"):
             title=dict(text="Drawdown %", font=dict(size=12, color='#8b949e')),
             showlegend=False,
         )
-        st.plotly_chart(fig_dd, use_container_width=True)
+        st.plotly_chart(fig_dd, width="stretch")
 
         # ── מסקנה אוטומטית ──
         verdict_lines = []
@@ -5932,7 +5932,7 @@ with st.container(key="tabbody_backtest"):
                 except: return ""
             st.dataframe(
                 df_trades_bt[disp_cols].style.map(color_ret_bt, subset=["תשואה"]),
-                use_container_width=True, hide_index=True
+                width="stretch", hide_index=True
             )
         else:
             st.info("לא זוהו עסקאות מלאות בטווח הנבחר. נסי להגדיל את טווח הזמן.")
@@ -6667,7 +6667,7 @@ with st.container(key="tabbody_compare"):
         new_cmp = st.text_input("הוסיפי מניה לרשימה", placeholder="AAPL, MSFT, TSLA...",
                                 key="cmp_new_input", label_visibility="collapsed").upper().strip()
     with add_c2:
-        if st.button("➕ הוסף", key="cmp_add_btn", type="primary", use_container_width=True):
+        if st.button("➕ הוסף", key="cmp_add_btn", type="primary", width="stretch"):
             if new_cmp and new_cmp not in st.session_state.cmp_symbols:
                 st.session_state.cmp_symbols.append(new_cmp)
                 save_user_data()
@@ -6822,7 +6822,7 @@ with st.container(key="tabbody_compare"):
                 yaxis=dict(gridcolor=GR, zeroline=False, color='#8b949e',
                            side='right', ticksuffix=''),
             )
-            st.plotly_chart(fig_cmp, use_container_width=True)
+            st.plotly_chart(fig_cmp, width="stretch")
 
             # ══ CHART 2: Drawdown ══
             st.markdown("#### 📉 Drawdown — ירידה מהשיא")
@@ -6851,7 +6851,7 @@ with st.container(key="tabbody_compare"):
                             font=dict(size=10, color='#c9d1d9')),
                 showlegend=False,
             )
-            st.plotly_chart(fig_dd_cmp, use_container_width=True)
+            st.plotly_chart(fig_dd_cmp, width="stretch")
 
             # ══ TABLE: מדדים זה לצד זה ══
             st.markdown("#### 📋 השוואת מדדים")
@@ -7083,7 +7083,7 @@ with st.container(key="tabbody_portfolio"):
                 showlegend=False,
                 font=dict(color='#8b949e'),
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width="stretch")
 
         # ── Holdings table ──
         with pc2:
