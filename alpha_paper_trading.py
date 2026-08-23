@@ -6982,7 +6982,19 @@ with st.container(key="tabbody_portfolio"):
     # ── Add position form ──
     with st.expander("➕ הוסף מניה לתיק", expanded=len(st.session_state.portfolio_positions)==0):
         pa1, pa2, pa3, pa4 = st.columns(4)
-        with pa1: pt_sym  = st.text_input("סימול", placeholder="AAPL", key="pt_sym").upper().strip()
+        with pa1:
+            _sym_col, _fetch_col = st.columns([4, 1])
+            with _sym_col:
+                pt_sym = st.text_input("סימול", placeholder="AAPL", key="pt_sym").upper().strip()
+            with _fetch_col:
+                st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+                if st.button("🔄", key="pt_fetch_price", help="שלוף מחיר נוכחי"):
+                    if pt_sym:
+                        _price = get_live_price(pt_sym)
+
+                        if _price:
+                            st.session_state["pt_cost"] = round(float(_price), 2)
+                            st.rerun()
         with pa2: pt_qty  = st.number_input("כמות", min_value=0.01, value=1.0, step=1.0, key="pt_qty")
         with pa3: pt_cost = st.number_input("מחיר קנייה ($)", min_value=0.01, value=100.0, key="pt_cost")
         with pa4:
