@@ -456,7 +456,7 @@ def build_events_criterion(days_to_earnings: Optional[int], macro_event: Optiona
     if days_to_earnings is None:
         passed = True if macro_event is None else False
     else:
-        passed = days_to_earnings > cfg.earnings_blackout_days
+        passed = (days_to_earnings > cfg.earnings_blackout_days) and (macro_event is None)
 
     parts = []
     if days_to_earnings is None:
