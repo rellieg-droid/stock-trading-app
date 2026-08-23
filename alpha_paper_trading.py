@@ -6212,6 +6212,34 @@ with st.container(key="tabbody_trade"):
 
     with tr_sub1:
             st.markdown(f"### 🛒 Paper Trading — {ticker}")
+            if st.session_state.get("last_trade_receipt"):
+                _rc = st.session_state["last_trade_receipt"]
+                _rc_clr = "#3fb950" if _rc["action"] == "BUY" else ("#3fb950" if _rc.get("pnl", 0) >= 0 else "#f85149")
+                _rc_action_he = "קנייה" if _rc["action"] == "BUY" else "מכירה"
+                _rc_pnl_line = (
+                    f'<div style="color:#8b949e;font-size:.72rem;">P&L: '
+                    f'<span style="color:{_rc_clr};font-weight:700;">{_rc["pnl"]:+.2f}</span></div>'
+                ) if "pnl" in _rc else ""
+                _rc_stop_line = (
+                    f'<div style="color:#8b949e;font-size:.72rem;">סטופ: {sym}{_rc["stop_price"]:.2f}</div>'
+                ) if _rc.get("stop_price") else ""
+                _rc_col1, _rc_col2 = st.columns([9, 1])
+                with _rc_col1:
+                    st.markdown(
+                        f'<div style="background:#161b22;border:1px solid #21262d;'
+                        f'border-top:3px solid {_rc_clr};border-radius:12px;'
+                        f'padding:12px 16px;margin-bottom:10px;direction:rtl;">'
+                        f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;">בוצע · {_rc["date"]}</div>'
+                        f'<div style="font-weight:700;color:#e6edf3;font-size:.95rem;margin:2px 0;">'
+                        f'{_rc_action_he} {_rc["shares"]} {_rc["symbol"]} @ {sym}{_rc["price"]:.2f} '
+                        f'(סה"כ {sym}{_rc["total"]:,.2f})</div>'
+                        f'{_rc_pnl_line}{_rc_stop_line}'
+                        f'</div>', unsafe_allow_html=True
+                    )
+                with _rc_col2:
+                    if st.button("✕", key="dismiss_trade_receipt"):
+                        del st.session_state["last_trade_receipt"]
+                        st.rerun()
             cp_ = get_live_price(ticker)
             if cp_:
                 ci, ct_ = st.columns(2)
@@ -6234,7 +6262,16 @@ with st.container(key="tabbody_trade"):
                     act = st.radio("פעולה:", ["🟢 קנייה", "🔴 מכירה"], horizontal=True)
                     si_ = st.number_input("כמות:", min_value=1, max_value=1000, value=1)
                     tv_ = si_ * cp_
-                    st.markdown(f"**עלות: {sym}{tv_:,.2f}**")
+                    st.markdown(
+                        f'<div style="background:#161b22;border:1px solid #21262d;'
+                        f'border-radius:12px;padding:12px 16px;margin:6px 0;direction:rtl;">'
+                        f'<div style="color:#8b949e;font-size:.62rem;text-transform:uppercase;">לאישור</div>'
+                        f'<div style="font-weight:700;color:#e6edf3;font-size:.95rem;margin:2px 0;">'
+                        f'{act.split(" ")[-1]} {si_} {ticker} @ {sym}{cp_:.2f}</div>'
+                        f'<div style="color:#8b949e;font-size:.8rem;">סה"כ: '
+                        f'<span style="color:#e6edf3;font-weight:700;">{sym}{tv_:,.2f}</span></div>'
+                        f'</div>', unsafe_allow_html=True
+                    )
                     nt_ = st.text_input("הערה:", placeholder="סיבה לעסקה")
                     if "מכירה" in act:
                         # שדות המודול הפסיכולוגי — מופיעים רק בסגירת עסקה, לא בקנייה.
@@ -6275,6 +6312,11 @@ with st.container(key="tabbody_trade"):
                                     "shares": si_, "price": cp_, "total": tv_, "note": nt_,
                                 })
                                 save_pf(p)
+                                st.session_state["last_trade_receipt"] = {
+                                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "action": "BUY",
+                                    "symbol": ticker, "shares": si_, "price": cp_, "total": tv_,
+                                    "stop_price": pos.get("stop_price"),
+                                }
                                 st.success(f"✅ קנית {si_} מניות ב-{sym}{cp_:.2f}" + (f" · סטופ {sym}{pos['stop_price']:.2f}" if pos.get("stop_price") else ""))
                                 st.rerun()
                             else:
@@ -6302,6 +6344,11 @@ with st.container(key="tabbody_trade"):
                                     )
                                 except Exception:
                                     pass  # אי רישום ליומן הפסיכולוגי לא אמור לחסום סגירת העסקה עצמה
+                                st.session_state["last_trade_receipt"] = {
+                                    "date": _sell_date, "action": "SELL",
+                                    "symbol": ticker, "shares": si_, "price": cp_, "total": tv_,
+                                    "pnl": round(pnl, 2),
+                                }
                                 st.success(f"{'✅' if pnl >= 0 else '❌'} P&L: {sym}{pnl:+.2f}")
                                 st.rerun()
                             else:
