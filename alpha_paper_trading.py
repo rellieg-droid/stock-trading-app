@@ -2346,7 +2346,7 @@ if df is None:
     )
     st.info("💡 בעיה זמנית מול Yahoo Finance קורית לפעמים. לחיצה על אחד מהכפתורים מטה מנסה טיקר אחר:")
     _esc_cols = st.columns(7)
-    for _esc_sym, _esc_col in zip(["AAPL", "TSLA", "MSFT", "GOOGL", "NVDA", "TEVA", "CHKP.TA"], _esc_cols):
+    for _esc_sym, _esc_col in zip(["AAPL", "TSLA", "MSFT", "GOOGL", "NVDA", "TEVA", "CHKP"], _esc_cols):
         with _esc_col:
             if st.button(_esc_sym, key=f"esc_{_esc_sym}", width="stretch"):
                 st.session_state.ticker = _esc_sym
@@ -2685,7 +2685,7 @@ with st.container(key="tabbody_home"):
         result = {}
         for name, sym in syms_tuple:
             try:
-                h = yf.Ticker(sym).history(period="2d")
+                h = yf.Ticker(sym).history(period="5d")
                 if len(h) >= 2:
                     cur = float(h["Close"].iloc[-1]); prev = float(h["Close"].iloc[-2])
                     result[name] = {"price": cur, "chg": (cur-prev)/prev*100}
@@ -2698,7 +2698,7 @@ with st.container(key="tabbody_home"):
         rows = []
         for s in us_syms:
             try:
-                h = yf.Ticker(s).history(period="2d")
+                h = yf.Ticker(s).history(period="5d")
                 if len(h) >= 2:
                     c2 = float(h["Close"].iloc[-1]); p2 = float(h["Close"].iloc[-2])
                     rows.append({"sym":s,"price":c2,"chg":(c2-p2)/p2*100,"vol":float(h["Volume"].iloc[-1]),"mkt":"—"})
@@ -2711,12 +2711,12 @@ with st.container(key="tabbody_home"):
     @st.cache_data(ttl=180)
     def load_ta_market():
         ta_groups = {
-            'ת"א 35':   ["FIBI.TA","LUMI.TA","DSCT.TA","ESLT.TA","TEVA.TA","NICE.TA","CHKP.TA"],
-            'ת"א 125':  ["RSEL.TA","AURA.TA","SANO.TA","ENLT.TA"],
-            "בנקים":    ["FIBI.TA","LUMI.TA","DSCT.TA","HAPO.TA","MIZR.TA"],
-            "טכנולוגיה":["NICE.TA","CHKP.TA","ESLT.TA"],
+            'ת"א 35':   ["FIBI.TA","LUMI.TA","DSCT.TA","ESLT.TA","TEVA.TA","NICE.TA","CHKP"],
+            'ת"א 125':  ["RSEL.TA","AURA.TA","SANO1.TA","ENLT.TA"],
+            "בנקים":    ["FIBI.TA","LUMI.TA","DSCT.TA","POLI.TA","MZTF.TA"],
+            "טכנולוגיה":["NICE.TA","CHKP","ESLT.TA"],
             'נדל"ן':    ["AZRG.TA","EMCO.TA","AFRE.TA"],
-            "ביומד":    ["TEVA.TA","KMDA.TA","SPNS.TA"],
+            "ביומד":    ["TEVA.TA","KMDA.TA","EVGN.TA"],
             "נפט וגז":  ["DLEKG.TA","NFTA.TA"],
         }
         result = {}
@@ -2724,7 +2724,7 @@ with st.container(key="tabbody_home"):
             rows_ta = []
             for s in syms:
                 try:
-                    h = yf.Ticker(s).history(period="2d")
+                    h = yf.Ticker(s).history(period="5d")
                     if len(h) >= 2:
                         c2 = float(h["Close"].iloc[-1]); p2 = float(h["Close"].iloc[-2])
                         inf_ta = load_info(s)
