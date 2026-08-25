@@ -708,6 +708,36 @@ FETCH_PERIODS = {
     "MAX": "max",
 }
 
+import re
+def _view_window_start(period_str, last_ts):
+    """
+    מחשבת נקודת התחלה לחלון התצוגה הראשוני בגרף, לפי מחרוזת period
+    מ-PERIODS (למשל "1d", "5d", "1mo", "ytd", "max"), ביחס לנר האחרון.
+    מחזירה None כשאין צורך בהגבלה (max).
+    """
+    if not period_str or period_str == "max":
+        return None
+    if period_str == "ytd":
+        try:
+            return pd.Timestamp(year=last_ts.year, month=1, day=1, tz=getattr(last_ts, 'tz', None))
+        except Exception:
+            return None
+    m = re.match(r"(\d+)(d|mo|y)$", period_str)
+    if not m:
+        return None
+    n, unit = int(m.group(1)), m.group(2)
+    try:
+        if unit == "d":
+            return last_ts - pd.Timedelta(days=n)
+        if unit == "mo":
+            return last_ts - pd.DateOffset(months=n)
+        if unit == "y":
+            return last_ts - pd.DateOffset(years=n)
+    except Exception:
+        return None
+    return None
+
+
 COMPANY_MAP = {
     # English
     "apple":"AAPL","microsoft":"MSFT","google":"GOOGL","alphabet":"GOOGL",
@@ -2326,6 +2356,7 @@ with st.sidebar:
 # ── LOAD DATA ──
 ticker          = st.session_state.ticker
 period, interval = PERIODS[st.session_state.period]
+_view_period_raw = period
 period = FETCH_PERIODS.get(st.session_state.period, period)
 sym             = get_sym(ticker)
 il              = "🇮🇱" if is_il(ticker) else ""
@@ -3464,6 +3495,9 @@ with st.container(key="tabbody_chart"):
         xaxis3=dict(**axis_s, **spike_x),
         yaxis3=dict(**axis_s, **spike_y, side='right'),
     )
+    _view_start = _view_window_start(_view_period_raw, idx[-1])
+    if _view_start is not None:
+        fig.update_xaxes(range=[_view_start, idx[-1]])
     st.plotly_chart(fig, width="stretch",
                     config={"scrollZoom": True, "displayModeBar": True,
                             "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
