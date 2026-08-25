@@ -182,6 +182,10 @@ def fetch_atm_iv(symbol: str) -> Optional[float]:
             if side is None or side.empty or "impliedVolatility" not in side:
                 continue
             side = side.copy()
+            if "bid" in side:
+                side = side[side["bid"] > 0]
+            if side.empty:
+                continue
             side["_dist"] = (side["strike"] - spot).abs()
             frames.append(side.nsmallest(3, "_dist")["impliedVolatility"])
         if not frames:
