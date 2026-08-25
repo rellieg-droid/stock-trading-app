@@ -190,13 +190,28 @@ def render_strategy_tab(default_ticker: str = "NVDA",
         hv_max = e2.slider("סף אחוזון HV", 10, 95,
                            int(cfg.hv_rank_pass_max), key="strat_hv_max")
         vix_max = e3.slider("סף VIX", 10, 40, int(cfg.vix_max), key="strat_vix_max")
-        e4, e5, e6 = st.columns(3)
-        atr_mult = e4.slider("מכפיל ATR ל-Stop", 1.0, 4.0,
+        _e4, _e5 = st.columns(2)
+        atr_mult = _e4.slider("מכפיל ATR ל-Stop", 1.0, 4.0,
                              float(cfg.atr_stop_multiplier), 0.5, key="strat_atr_mult")
-        blackout = e5.slider("חלון חסימה לפני דוח (ימים)", 0, 21,
+        blackout = _e5.slider("חלון חסימה לפני דוח (ימים)", 0, 21,
                              int(cfg.earnings_blackout_days), key="strat_blackout")
-        macro = e6.text_input("אירוע מאקרו ידוע", value="", key="strat_macro",
+        # e6 נשאר st ישירות -- שדה הטקסט לא חולק שורה עם הסליידרים
+        e6 = st
+        from macro_events import macro_event_within, get_macro_events
+        from datetime import date as _mdate, timedelta as _mtd
+        _macro_computed = macro_event_within(blackout)
+        if "strat_macro" not in st.session_state:
+            st.session_state["strat_macro"] = _macro_computed
+            st.session_state["_strat_macro_auto_val"] = _macro_computed
+        elif st.session_state.get("_strat_macro_auto_val") == st.session_state.get("strat_macro"):
+            st.session_state["strat_macro"] = _macro_computed
+            st.session_state["_strat_macro_auto_val"] = _macro_computed
+        macro = e6.text_input("אירוע מאקרו ידוע", key="strat_macro",
                               placeholder="למשל: החלטת ריבית בשבוע הבא")
+        _upcoming_macro = get_macro_events(start=_mdate.today(), end=_mdate.today() + _mtd(days=30))
+        if _upcoming_macro:
+            _macro_lines = "  \n".join(f"{d.strftime('%d/%m')} - {lbl}" for d, lbl in _upcoming_macro[:5])
+            e6.caption(f"אירועים קרובים (30 יום):  \n{_macro_lines}")
 
     cfg = se.StrategyConfig(
         risk_profile=profile,
