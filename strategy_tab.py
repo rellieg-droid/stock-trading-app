@@ -184,18 +184,16 @@ def render_strategy_tab(default_ticker: str = "NVDA",
     with st.expander("כוונון ספים", expanded=True):
         st.caption("הספים אינם קבועי טבע. במשטר פיזור גבוה כמעט כל המניות "
                    "יושבות באחוזון עליון, ואז שווה להעלות את הסף ל-70 ולראות מה עובר.")
-        e1, e2, e3 = st.columns(3)
-        rel_max = e1.slider("סף אחוזון תנודתיות יחסית", 10, 95,
+        # כל הסליידרים ברוחב מלא, בלי st.columns() -- תבנית מוכחת (rr_tab.py)
+        rel_max = st.slider("סף אחוזון תנודתיות יחסית", 10, 95,
                             int(cfg.rel_vol_rank_pass_max), key="strat_rel_max")
-        hv_max = e2.slider("סף אחוזון HV", 10, 95,
+        hv_max = st.slider("סף אחוזון HV", 10, 95,
                            int(cfg.hv_rank_pass_max), key="strat_hv_max")
-        vix_max = e3.slider("סף VIX", 10, 40, int(cfg.vix_max), key="strat_vix_max")
-        _e4, _e5 = st.columns(2)
-        atr_mult = _e4.slider("מכפיל ATR ל-Stop", 1.0, 4.0,
+        vix_max = st.slider("סף VIX", 10, 40, int(cfg.vix_max), key="strat_vix_max")
+        atr_mult = st.slider("מכפיל ATR ל-Stop", 1.0, 4.0,
                              float(cfg.atr_stop_multiplier), 0.5, key="strat_atr_mult")
-        blackout = _e5.slider("חלון חסימה לפני דוח (ימים)", 0, 21,
+        blackout = st.slider("חלון חסימה לפני דוח (ימים)", 0, 21,
                              int(cfg.earnings_blackout_days), key="strat_blackout")
-        # e6 נשאר st ישירות -- שדה הטקסט לא חולק שורה עם הסליידרים
         e6 = st
         from macro_events import macro_event_within, get_macro_events
         from datetime import date as _mdate, timedelta as _mtd
