@@ -174,7 +174,7 @@ def render_strategy_tab(default_ticker: str = "NVDA",
     ticker = c1.text_input("מניה", value=default_ticker, key="strat_ticker").strip().upper()
     portfolio = c2.number_input("שווי תיק ($)", min_value=1_000.0, step=1_000.0,
                                 value=float(default_portfolio), key="strat_portfolio")
-    position_pct = c3.slider("% מהתיק", 1, 50, 5, key="strat_pos_pct") / 100.0
+    position_pct = c3.number_input("% מהתיק", min_value=1, max_value=50, value=5, step=1, key="strat_pos_pct") / 100.0
     profile_he = c4.selectbox("פרופיל סיכון", list(RISK_PROFILES),
                               index=1, key="strat_profile")
     profile = RISK_PROFILES[profile_he]
@@ -184,16 +184,19 @@ def render_strategy_tab(default_ticker: str = "NVDA",
     with st.expander("כוונון ספים", expanded=True):
         st.caption("הספים אינם קבועי טבע. במשטר פיזור גבוה כמעט כל המניות "
                    "יושבות באחוזון עליון, ואז שווה להעלות את הסף ל-70 ולראות מה עובר.")
-        # כל הסליידרים ברוחב מלא, בלי st.columns() -- תבנית מוכחת (rr_tab.py)
-        rel_max = st.slider("סף אחוזון תנודתיות יחסית", 10, 95,
-                            int(cfg.rel_vol_rank_pass_max), key="strat_rel_max")
-        hv_max = st.slider("סף אחוזון HV", 10, 95,
-                           int(cfg.hv_rank_pass_max), key="strat_hv_max")
-        vix_max = st.slider("סף VIX", 10, 40, int(cfg.vix_max), key="strat_vix_max")
-        atr_mult = st.slider("מכפיל ATR ל-Stop", 1.0, 4.0,
-                             float(cfg.atr_stop_multiplier), 0.5, key="strat_atr_mult")
-        blackout = st.slider("חלון חסימה לפני דוח (ימים)", 0, 21,
-                             int(cfg.earnings_blackout_days), key="strat_blackout")
+        # number_input בשורה אחת (st.columns(5)) -- עוקף באג ידוע ב-Streamlit
+        # (GitHub #3555) של תווית ערך סליידר בתוך st.expander שנחתכת/נעלמת.
+        e1, e2, e3, e4, e5 = st.columns(5)
+        rel_max = e1.number_input("סף אחוזון תנודתיות יחסית", min_value=10, max_value=95,
+                                  value=int(cfg.rel_vol_rank_pass_max), step=1, key="strat_rel_max")
+        hv_max = e2.number_input("סף אחוזון HV", min_value=10, max_value=95,
+                                 value=int(cfg.hv_rank_pass_max), step=1, key="strat_hv_max")
+        vix_max = e3.number_input("סף VIX", min_value=10, max_value=40,
+                                  value=int(cfg.vix_max), step=1, key="strat_vix_max")
+        atr_mult = e4.number_input("מכפיל ATR ל-Stop", min_value=1.0, max_value=4.0,
+                                   value=float(cfg.atr_stop_multiplier), step=0.5, key="strat_atr_mult")
+        blackout = e5.number_input("חלון חסימה לפני דוח (ימים)", min_value=0, max_value=21,
+                                   value=int(cfg.earnings_blackout_days), step=1, key="strat_blackout")
         e6 = st
         from macro_events import macro_event_within, get_macro_events
         from datetime import date as _mdate, timedelta as _mtd
