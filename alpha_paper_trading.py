@@ -15,6 +15,7 @@ from streamlit_autorefresh import st_autorefresh
 from streamlit_option_menu import option_menu
 from streamlit_searchbox import st_searchbox
 from strategy_tab import render_strategy_tab
+from riskshield_tab import render_riskshield_tab
 from strategy_guide import render_strategy_guide
 from position_sizing import atr_position_defaults
 
@@ -2525,10 +2526,11 @@ NAV_GROUPS = {
     "גרף":   {"icon": "graph-up",   "subs": ["📈 גרף"]},
     "ניתוח": {"icon": "cpu", "subs": ["🎯 ניתוח", "⚖️ השוואה", "⏳ Backtest", "🧭 אסטרטגיה"]},
     "מסחר":  {"icon": "cart",       "subs": ["🛒 מסחר", "💼 תיק", "👁️ Watchlist"]},
+    "RiskShield": {"icon": "shield-check", "subs": ["🛡️ RiskShield"]},
     "עוד":   {"icon": "three-dots", "subs": ["🔔 התראות", "📅 דוחות", "📖 מדריך"]},
 }
-GROUP_ORDER = ["בית", "גרף", "ניתוח", "מסחר", "עוד"]
-GROUP_BOTTOM_ICONS = {"בית": "🏠", "גרף": "📈", "ניתוח": "🎯", "מסחר": "🛒", "עוד": "☰"}
+GROUP_ORDER = ["בית", "גרף", "ניתוח", "מסחר", "RiskShield", "עוד"]
+GROUP_BOTTOM_ICONS = {"בית": "🏠", "גרף": "📈", "ניתוח": "🎯", "מסחר": "🛒", "RiskShield": "🛡️", "עוד": "☰"}
 
 # טקסט ה-tooltip בריחוף. מפרט מה יש בכל קבוצה, כי האייקון לבדו לא מספיק.
 GROUP_TOOLTIPS = {
@@ -2536,6 +2538,7 @@ GROUP_TOOLTIPS = {
     "גרף":   "גרף — נרות, אינדיקטורים וזיהוי תבניות",
     "ניתוח": "ניתוח — ציון משולב, השוואה, Backtest ואסטרטגיה",
     "מסחר":  "מסחר — קנייה ומכירה, תיק אחזקות, Watchlist וניהול יעדים",
+    "RiskShield": "RiskShield — מחשבון Black-Scholes ותנודתיות, בלי המלצות קנייה/מכירה",
     "עוד":   "עוד — התראות, לוח דוחות ומדריך",
 }
 
@@ -2672,12 +2675,13 @@ active_sub = render_top_pill(active_group)
 
 _TAB_KEYS = ["tabbody_home", "tabbody_chart", "tabbody_analysis", "tabbody_backtest",
              "tabbody_trade", "tabbody_guide", "tabbody_compare", "tabbody_portfolio",
-             "tabbody_alerts", "tabbody_reports", "tabbody_watchlist", "tabbody_strategy"]
+             "tabbody_alerts", "tabbody_reports", "tabbody_watchlist", "tabbody_strategy",
+             "tabbody_riskshield"]
 _active_map = {"🏠 Home": "tabbody_home", "📈 גרף": "tabbody_chart", "🎯 ניתוח": "tabbody_analysis",
                "⏳ Backtest": "tabbody_backtest", "🛒 מסחר": "tabbody_trade", "📖 מדריך": "tabbody_guide",
                "⚖️ השוואה": "tabbody_compare", "💼 תיק": "tabbody_portfolio", "🔔 התראות": "tabbody_alerts",
                "📅 דוחות": "tabbody_reports", "👁️ Watchlist": "tabbody_watchlist",
-               "🧭 אסטרטגיה": "tabbody_strategy"}
+               "🧭 אסטרטגיה": "tabbody_strategy", "🛡️ RiskShield": "tabbody_riskshield"}
 _active_key = _active_map.get(active_sub)
 st.markdown(
     # TAB_GAP_FIX_V2 — לא מספיק להסתיר את הקונטיינר. st.container שם את
@@ -7595,3 +7599,6 @@ with st.container(key="tabbody_watchlist"):
 # ════════════════════════════════════════
 with st.container(key="tabbody_strategy"):
     render_strategy_tab(default_ticker=st.session_state.get("ticker", "NVDA"))
+
+with st.container(key="tabbody_riskshield"):
+    render_riskshield_tab(default_ticker=st.session_state.get("ticker", "NVDA"))
