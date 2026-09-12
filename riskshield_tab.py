@@ -21,7 +21,16 @@ from typing import Optional
 
 import streamlit as st
 
-from options_engine import bs_greeks, norm_cdf, realized_vol, implied_vol, iv_rv_ratio, Greeks
+from math import log as _log
+
+import sqlite3
+from datetime import date as _date
+
+from options_engine import (
+    bs_greeks, norm_cdf, realized_vol, implied_vol, iv_rv_ratio, Greeks,
+    historical_put_otm_probability, fat_tail_otm_probability,
+    rv_rank, rv_percentile,
+)
 
 # ---------------------------------------------------------------------------
 # עיצוב - אותה מוסכמת CSS כמו rr_tab.py, עם משתני CSS גלובליים ו-fallback
@@ -158,6 +167,52 @@ def _try_fetch_closes(ticker: str, period: str = "1y") -> Optional[list]:
         return None
 
 
+# ---------------------------------------------------------------------------
+# איסוף היסטוריית IV - תשתית ל-IV Rank אמיתי בעתיד. options_engine.py
+# נשאר טהור בכוונה; כל ה-I/O כאן, ליד ה-yfinance שכבר בקובץ הזה.
+# ---------------------------------------------------------------------------
+_IV_HISTORY_DB = "iv_history.db"
+
+
+def _iv_history_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(_IV_HISTORY_DB)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS iv_observations ("
+        "ticker TEXT NOT NULL, observed_at TEXT NOT NULL, "
+        "dte INTEGER NOT NULL, iv REAL NOT NULL)"
+    )
+    return conn
+
+
+def _record_iv_observation(ticker: str, dte: int, iv: float) -> None:
+    """שומרת תצפית IV יומית. נכשלת בשקט אם אי אפשר לכתוב (דיסק/הרשאות) -
+    זו תשתית עזר, לא אמורה לשבור את הטאב אם היא נכשלת."""
+    if not ticker:
+        return
+    try:
+        with _iv_history_conn() as conn:
+            conn.execute(
+                "INSERT INTO iv_observations (ticker, observed_at, dte, iv) VALUES (?, ?, ?, ?)",
+                (ticker.upper(), _date.today().isoformat(), int(dte), float(iv)),
+            )
+    except Exception:
+        pass
+
+
+def _iv_observation_count(ticker: str) -> int:
+    """כמה תצפיות IV נאספו עד כה לטיקר הזה. 0 אם אין/נכשל - לא קורס."""
+    if not ticker:
+        return 0
+    try:
+        with _iv_history_conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM iv_observations WHERE ticker = ?", (ticker.upper(),)
+            ).fetchone()
+            return int(row[0]) if row else 0
+    except Exception:
+        return 0
+
+
 def _ratio_badge(ratio: float) -> str:
     """IV/RV מעל 1 = השוק מתמחר תנודתיות גבוהה מהמומשת. אין כאן קביעה של 'טוב'/'רע' -
     רק תיאור עובדתי של היחס, בהתאם לפילוסופיית ה-non-recommendation של RiskShield."""
@@ -188,7 +243,9 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
 
     ticker = st.text_input("טיקר (לצורך מילוי ראשוני בלבד)", value=default_ticker, key=f"{key_prefix}_ticker")
 
-    tab_bs, tab_iv, tab_rv = st.tabs(["מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)"])
+    tab_bs, tab_iv, tab_rv, tab_prob = st.tabs(
+        ["מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)", "הסתברות OTM (Put)"]
+    )
 
     # -------------------------------------------------------------------
     # טאב 1: Black-Scholes price + Greeks
@@ -268,6 +325,12 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     T=iv_days / 365.0, r=iv_r_pct / 100.0,
                 )
                 _card("תוצאה", _metric("IV גלום מהשוק", f"{iv_result:.1%}") + _IV_EXPLAIN)
+                _record_iv_observation(ticker, int(iv_days), iv_result)
+                n_obs = _iv_observation_count(ticker)
+                st.caption(
+                    f"נשמר לאיסוף היסטוריית IV. {n_obs} תצפיות עד כה עבור {ticker or 'טיקר לא צוין'} "
+                    "(IV Rank אמיתי דורש היסטוריה - עד אז, טאב 'הסתברות OTM' מציג RV Rank כתחליף)."
+                )
             except ValueError as e:
                 st.error(f"לא ניתן לפתור: {e}")
 
@@ -307,4 +370,134 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                         unsafe_allow_html=True,
                     )
 
+
+    # -------------------------------------------------------------------
+    # טאב 4: הסתברות OTM - שלושה מודלים נפרדים, בלי מיזוג ובלי המלצה
+    # -------------------------------------------------------------------
+    with tab_prob:
+        st.markdown(
+            '<div class="rs-explain" style="margin-bottom:12px;">'
+            'שלושה מודלים נפרדים להערכת הסתברות OTM לפוט: מודל (Black-Scholes), '
+            'היסטורי (לפי מה שקרה בפועל בעבר), ו-Fat-tail (מתחשב בזנבות שמנים '
+            'מעבר להתפלגות נורמלית). המודלים מוצגים כל אחד בנפרד - אין כאן ציון '
+            'מאוחד, דירוג, או "המלצה". אם המודלים חלוקים ביניהם באופן משמעותי, '
+            'זה מוצג במפורש, לא מוסתר.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        spot_default = _try_fetch_spot(ticker) or 100.0
+        cols = st.columns(4)
+        with cols[0]:
+            prob_S = st.number_input("מחיר נכס (S)", min_value=0.01, value=float(round(spot_default, 2)),
+                                      key=f"{key_prefix}_prob_S", help=_HELP["S"])
+        with cols[1]:
+            prob_K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default * 0.9, 2)),
+                                      key=f"{key_prefix}_prob_K", help=_HELP["K"])
+        with cols[2]:
+            prob_days = st.number_input("ימים לפקיעה", min_value=1, value=30,
+                                         key=f"{key_prefix}_prob_days", help=_HELP["days"])
+        with cols[3]:
+            prob_sigma_pct = st.number_input("IV למודל (%)", min_value=0.1, value=30.0,
+                                              key=f"{key_prefix}_prob_sigma", help=_HELP["sigma"])
+
+        prob_r_pct = st.number_input("ריבית חסרת סיכון (%)", value=4.5,
+                                      key=f"{key_prefix}_prob_r", help=_HELP["r"])
+
+        if st.button("חשב הסתברות OTM", key=f"{key_prefix}_prob_calc"):
+            # --- מודל 1: Normal (Black-Scholes) - קיים כבר, רק נחשף כאן ---
+            try:
+                normal_prob = bs_greeks(
+                    kind="put", S=prob_S, K=prob_K, T=prob_days / 365.0,
+                    sigma=prob_sigma_pct / 100.0, r=prob_r_pct / 100.0,
+                ).prob_otm
+            except ValueError as e:
+                st.error(f"קלט לא תקין למודל: {e}")
+                normal_prob = None
+
+            available_for_diff = {}
+            if normal_prob is not None:
+                available_for_diff["מודל"] = normal_prob
+
+            grid_normal = _metric("הסתברות OTM - מודל", f"{normal_prob:.1%}" if normal_prob is not None else "—")
+            _card("מודל (Black-Scholes)", f'<div class="rs-grid">{grid_normal}</div>')
+
+            # --- מודלים 2+3 דורשים היסטוריית מחירים -----------------------
+            closes = _try_fetch_closes(ticker, period="10y")
+            if closes is None:
+                st.info(
+                    f"לא נמצאה היסטוריית מחירים עבור \"{ticker}\" - מוצג רק מודל "
+                    "ה-Black-Scholes. היסטורי ו-Fat-tail דורשים סדרת מחירים."
+                )
+            else:
+                hist = historical_put_otm_probability(closes, strike=prob_K, dte_days=int(prob_days))
+                period_metrics = "".join(
+                    _metric(f"{years} שנים", f"{p:.1%}" if p is not None else "אין מספיק היסטוריה")
+                    for years, p in sorted(hist.by_period.items())
+                )
+                weighted_html = (
+                    _metric("ממוצע משוקלל", f"{hist.weighted_otm:.1%}")
+                    if hist.weighted_otm is not None else ""
+                )
+                hist_explain = (
+                    '<div class="rs-explain">כל תקופה (1/3/5/10 שנים) מחושבת בנפרד לפי '
+                    'כמה פעמים בעבר המחיר, בהינתן אותו מרחק זמן לפקיעה, נשאר מעל הסטרייק. '
+                    'הממוצע המשוקלל (40/30/20/10) מוצג לצד הפירוט המלא, לא במקומו.'
+                    + (f'<br><b>{hist.note}</b>' if hist.note else '')
+                    + '</div>'
+                )
+                _card("היסטורי", f'<div class="rs-grid">{period_metrics}{weighted_html}</div>{hist_explain}')
+                if hist.weighted_otm is not None:
+                    available_for_diff["היסטורי"] = hist.weighted_otm
+
+                log_returns = [_log(closes[i] / closes[i - 1]) for i in range(1, len(closes)) if closes[i - 1] > 0]
+                fat = fat_tail_otm_probability(log_returns, S=prob_S, K=prob_K, dte_days=int(prob_days))
+                if fat.otm_probability is not None:
+                    grid_fat = "".join([
+                        _metric("הסתברות OTM - Fat-tail", f"{fat.otm_probability:.1%}"),
+                        _metric("דרגות חופש (df)", f"{fat.degrees_of_freedom:.1f}"),
+                        _metric("קורטוזיס עודף", f"{fat.excess_kurtosis:.2f}"),
+                    ])
+                    fat_explain = (
+                        '<div class="rs-explain">קירוב מוצהר: מעריך דרגות חופש של התפלגות '
+                        't-Student מהקורטוזיס העודף בתשואות ההיסטוריות, ומתאים לאופק הזמן '
+                        'לפי שורש-זמן. df נמוך = זנבות שמנים משמעותיים ביחס להתפלגות נורמלית.'
+                        '</div>'
+                    )
+                    _card("Fat-tail", f'<div class="rs-grid">{grid_fat}</div>{fat_explain}')
+                    available_for_diff["Fat-tail"] = fat.otm_probability
+                else:
+                    st.info(f"Fat-tail: {fat.note}")
+
+                rank = rv_rank(closes)
+                pct = rv_percentile(closes)
+                n_obs = _iv_observation_count(ticker)
+                grid_rv = "".join([
+                    _metric("RV Rank", f"{rank:.0f}" if rank is not None else "אין מספיק היסטוריה"),
+                    _metric("RV Percentile", f"{pct:.0f}%" if pct is not None else "אין מספיק היסטוריה"),
+                ])
+                rv_explain = (
+                    '<div class="rs-explain">תחליף זמני ל-IV Rank: yfinance/Yahoo לא שומרים '
+                    'ארכיון היסטוריית IV (רק שרשרת אופציות נוכחית), אז מוצג כאן דירוג של '
+                    'התנודתיות הממומשת (RV) - מה שקרה בפועל, לא מה שהשוק מתמחר. '
+                    f'נאספו {n_obs} תצפיות IV אמיתיות לטיקר הזה בטאב "תנודתיות גלומה" - '
+                    'ברגע שיצטבר מספיק, ניתן יהיה לחשב IV Rank אמיתי.'
+                    '</div>'
+                )
+                _card("RV Rank (תחליף זמני ל-IV Rank)", f'<div class="rs-grid">{grid_rv}</div>{rv_explain}')
+
+            # --- פערי מודלים - עובדה, לא ציון ------------------------------
+            if len(available_for_diff) >= 2:
+                spread = max(available_for_diff.values()) - min(available_for_diff.values())
+                cls = "red" if spread > 0.15 else ("yellow" if spread > 0.05 else "gray")
+                txt = f"פער בין המודלים: {spread:.1%}"
+                st.markdown(f'<span class="rs-badge {cls}">{txt}</span>', unsafe_allow_html=True)
+                if spread > 0.15:
+                    st.markdown(
+                        '<div class="rs-explain" style="margin-top:8px;">'
+                        'המודלים חלוקים ביותר מ-15 נקודות אחוז - זה סימן לאי-ודאות '
+                        'גבוהה, לא לכך שאחד מהם "נכון" והשאר טועים.'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
     st.markdown('</div>', unsafe_allow_html=True)
