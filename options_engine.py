@@ -146,6 +146,11 @@ def implied_vol(
             f"price ${market_price:,.4f} exceeds the model at sigma={hi:.0%}; "
             "widen hi or check the quote"
         )
+    if market_price < price(lo):
+        raise ValueError(
+            f"price ${market_price:,.4f} is below the model at sigma={lo:.2%} "
+            f"(~${price(lo):,.4f}); check the quote or the call/put selection"
+        )
 
     for _ in range(max_iter):
         mid = 0.5 * (lo + hi)
