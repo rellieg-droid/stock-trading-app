@@ -279,7 +279,9 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             q_pct = st.number_input("תשואת דיבידנד (%)", value=0.0,
                                      key=f"{key_prefix}_bs_q", help=_HELP["q"])
 
-        if st.button("חשב", key=f"{key_prefix}_bs_calc"):
+        _bs_flag = f"{key_prefix}_bs_show"
+        if st.button("חשב", key=f"{key_prefix}_bs_calc") or st.session_state.get(_bs_flag):
+            st.session_state[_bs_flag] = True
             try:
                 g: Greeks = bs_greeks(
                     kind=kind, S=S, K=K, T=days / 365.0,
@@ -321,7 +323,9 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         iv_r_pct = st.number_input("ריבית חסרת סיכון (%)", value=4.5,
                                     key=f"{key_prefix}_iv_r", help=_HELP["r"])
 
-        if st.button("חשב תנודתיות גלומה", key=f"{key_prefix}_iv_calc"):
+        _iv_flag = f"{key_prefix}_iv_show"
+        if st.button("חשב תנודתיות גלומה", key=f"{key_prefix}_iv_calc") or st.session_state.get(_iv_flag):
+            st.session_state[_iv_flag] = True
             try:
                 iv_result = implied_vol(
                     kind=iv_kind, market_price=iv_price, S=iv_S, K=iv_K,
@@ -347,7 +351,9 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         else:
             window = st.number_input("חלון (ימי מסחר)", min_value=5, value=min(252, len(closes)),
                                       key=f"{key_prefix}_rv_window", help=_HELP["rv_window"])
-            if st.button("חשב תנודתיות ממומשת", key=f"{key_prefix}_rv_calc"):
+            _rv_flag = f"{key_prefix}_rv_show"
+            if st.button("חשב תנודתיות ממומשת", key=f"{key_prefix}_rv_calc") or st.session_state.get(_rv_flag):
+                st.session_state[_rv_flag] = True
                 rv = realized_vol(closes, window=int(window))
                 grid = _metric("RV (שנתי)", f"{rv:.1%}")
                 _card(f"תוצאה עבור {ticker}", f'<div class="rs-grid">{grid}</div>{_RV_EXPLAIN}')
@@ -418,7 +424,9 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             prob_capital = st.number_input("הון זמין ($, אופציונלי - להצגת % מההון)", min_value=0.0, value=0.0,
                                             key=f"{key_prefix}_prob_capital")
 
-        if st.button("חשב הסתברות OTM", key=f"{key_prefix}_prob_calc"):
+        _prob_flag = f"{key_prefix}_prob_show"
+        if st.button("חשב הסתברות OTM", key=f"{key_prefix}_prob_calc") or st.session_state.get(_prob_flag):
+            st.session_state[_prob_flag] = True
             # --- מודל 1: Normal (Black-Scholes) - קיים כבר, רק נחשף כאן ---
             try:
                 normal_prob = bs_greeks(
@@ -591,7 +599,9 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         prot_contracts = st.number_input("מספר חוזי פוט", min_value=1, value=1,
                                           key=f"{key_prefix}_prot_contracts")
 
-        if st.button("חשב הגנה", key=f"{key_prefix}_prot_calc"):
+        _prot_flag = f"{key_prefix}_prot_show"
+        if st.button("חשב הגנה", key=f"{key_prefix}_prot_calc") or st.session_state.get(_prot_flag):
+            st.session_state[_prot_flag] = True
             cost = insurance_cost(prot_premium, prot_contracts)
             rows = protection_table(
                 shares=int(prot_shares), stock_entry=prot_entry, strike=prot_strike,
