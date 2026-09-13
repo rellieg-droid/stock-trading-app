@@ -33,6 +33,7 @@ from options_engine import (
     expected_move, strike_distance_in_expected_moves,
     stress_test_table, historical_short_put_pnl_distribution, expected_shortfall,
     protection_table, insurance_cost,
+    short_put_breakeven,
 )
 
 # ---------------------------------------------------------------------------
@@ -79,6 +80,11 @@ _CSS = """
   display: inline-block; cursor: help; font-size: 0.78rem;
   color: var(--c-text-2, #8B93A7); margin-bottom: 6px;
 }
+.rs-table { width:100%; border-collapse:collapse; direction:rtl; margin-top:8px; }
+.rs-table th, .rs-table td { padding:8px 10px; text-align:center; border-bottom:1px solid rgba(255,255,255,.08); white-space:nowrap; }
+.rs-table th { color: var(--c-text-2, #8B93A7); font-weight:600; font-size:.82rem; }
+.rs-table td { font-weight:600; font-size:.9rem; }
+.rs-table tr:hover td { background: rgba(255,255,255,.03); }
 
 /* תיקון נראות אייקון ה-tooltip (❓) של Streamlit - ה-CSS הגלובלי הכהה של
    האפליקציה כנראה דורס את הצבע המקורי שלו לצבע קרוב מדי לרקע. */
@@ -106,6 +112,11 @@ _HELP = {
     "iv_price": "מחיר השוק בפועל של האופציה (למשל, אמצע ה-bid/ask). מכאן המודל פותר אחורה איזו IV מסבירה את המחיר הזה.",
     "rv_window": "כמה ימי מסחר אחורה לכלול בחישוב. 252 ימי מסחר ≈ שנה קלנדרית.",
     "rv_iv_compare": "ה-IV שאיתו משווים את ה-RV שחושב. אפשר להזין ידנית, או להשתמש בערך שיצא בטאב 'תנודתיות גלומה'.",
+    "contracts": "כמה חוזי אופציה. כל חוזה מייצג 100 מניות - זה מה שהופך פרמיה קטנה למספרים גדולים.",
+    "capital": "ההון שהוקצה לעסקה הזו. משמש רק כדי להציג את הסיכון כאחוז מההון שלך - לא משפיע על שום חישוב אחר.",
+    "prot_shares": "כמה מניות בפועל מוחזקות ורוצים להגן עליהן.",
+    "prot_entry": "המחיר שבו נקנתה המניה (עלות הבסיס) - קובע את הרווח/הפסד היחסי בכל תרחיש סטרס.",
+    "prot_strike": "מחיר המימוש של הפוט המגן. מתחתיו הוא מתחיל לקזז הפסדים דולר-לדולר.",
 }
 
 _GREEKS_EXPLAIN = (
@@ -135,8 +146,12 @@ _RV_EXPLAIN = (
 )
 
 
-def _metric(label: str, value: str) -> str:
-    return f'<div class="rs-metric"><div class="rs-metric-label">{label}</div><div class="rs-metric-value">{value}</div></div>'
+def _metric(label: str, value: str, tooltip: Optional[str] = None) -> str:
+    help_html = f' <span class="rs-btn-help" title="{tooltip}">❓</span>' if tooltip else ""
+    return (
+        f'<div class="rs-metric"><div class="rs-metric-label">{label}{help_html}</div>'
+        f'<div class="rs-metric-value">{value}</div></div>'
+    )
 
 
 def _card(title: str, inner_html: str) -> None:
@@ -156,6 +171,24 @@ def _try_fetch_spot(ticker: str) -> Optional[float]:
         if hist.empty:
             return None
         return float(hist["Close"].iloc[-1])
+    except Exception:
+        return None
+
+
+def _try_fetch_atm_iv(ticker: str) -> Optional[float]:
+    """
+    IV אמיתי מהשוק (ATM, תפוגה 20-60 יום) - אותה fetch_atm_iv() מ-strategy_data.py
+    שכבר מייצרת את באדג' ה-IV בכותרת הראשית. מחזיר אחוזים (32.3, לא 0.323).
+    נכשל בשקט (None) אם strategy_data לא נגיש או שאין אופציות לטיקר.
+    """
+    if not ticker:
+        return None
+    try:
+        from strategy_data import fetch_atm_iv
+        iv = fetch_atm_iv(ticker)
+        if iv is None:
+            return None
+        return float(iv) * 100.0
     except Exception:
         return None
 
@@ -250,6 +283,42 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
 
     ticker = st.text_input("טיקר (לצורך מילוי ראשוני בלבד)", value=default_ticker, key=f"{key_prefix}_ticker")
 
+    with st.expander("📖 מדריך: מה ההבדל בין הטאבים, ומה זה אומר"):
+        st.markdown(
+            '<div class="rs-explain">'
+            '<b>מחיר וגריקס</b>: תיאורטי לגמרי - מזינים IV משוערת, מקבלים מחיר '
+            'תיאורטי לאופציה ואת הרגישויות שלה (גריקס). שאלה שהוא עונה עליה: '
+            '"אם התנודתיות היא X, כמה האופציה אמורה לעלות?"<br><br>'
+            '<b>תנודתיות גלומה (IV)</b>: ההפך - מזינים את המחיר האמיתי בשוק, '
+            'והמערכת פותרת אחורה איזו תנודתיות "מוסתרת" בתוכו. שאלה: '
+            '"השוק מתמחר את זה ב-$X - כלומר כמה תנועה הוא בעצם מצפה?"<br><br>'
+            '<b>תנודתיות ממומשת (RV)</b>: לא תיאורטי בכלל - מודד כמה המניה '
+            'באמת זזה בעבר, מהיסטוריית המחירים. משווים ל-IV כדי לראות אם '
+            'האופציה "יקרה" או "זולה" ביחס למה שקרה בפועל.<br><br>'
+            '<b>הסתברות OTM (Put)</b>: הטאב המורכב - לוקח את כל הכלים '
+            'הקודמים ומיישם על שאלה ספציפית: "מה הסיכוי שהמניה תישאר מעל '
+            'סטרייק מסוים עד הפקיעה?" לפי שלוש שיטות נפרדות, פלוס תזוזה '
+            'צפויה, סטרס טסט, CVaR, וטבלת הגנה (לצד קניית פוט).'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div class="rs-explain" style="margin-top:10px;">'
+            '<b>מילון מונחים קצר:</b><br>'
+            '<b>Strike (סטרייק)</b>: המחיר שנקבע מראש באופציה.<br>'
+            '<b>OTM</b>: "מחוץ לכסף" - האופציה פוקעת חסרת ערך (טוב למוכר פוט, רע לקונה).<br>'
+            '<b>IV</b>: מה השוק מצפה שהמניה תזוז (מהמחיר של האופציה עצמה).<br>'
+            '<b>RV</b>: מה המניה באמת זזה בעבר (מהמחיר ההיסטורי).<br>'
+            '<b>Expected Move</b>: טווח מחירים סביר עד הפקיעה, לפי ה-IV (בהנחת התפלגות נורמלית).<br>'
+            '<b>Fat-tail</b>: הסתברות OTM לפי התפלגות t-Student במקום נורמלית - '
+            '"זנבות שמנים" יותר, בדיוק התיקון להנחה של Expected Move שלא תמיד מחזיקה.<br>'
+            '<b>CVaR</b>: ממוצע ה-P/L ב-5% התרחישים ההיסטוריים הגרועים ביותר בפועל - '
+            'לא מניח שום התפלגות בכלל, פשוט לוקח מה שקרה.<br>'
+            '<b>סטרס טסט</b>: תרחישי ירידה קבועים (עד 50%-) - גם הם לא תלויים בשום הנחת התפלגות.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
     tab_bs, tab_iv, tab_rv, tab_prob = st.tabs(
         ["מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)", "הסתברות OTM (Put)"]
     )
@@ -264,16 +333,22 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             kind = st.selectbox("סוג", ["call", "put"], key=f"{key_prefix}_bs_kind", help=_HELP["kind"])
         with cols[1]:
             S = st.number_input("מחיר נכס (S)", min_value=0.01, value=float(round(spot_default, 2)),
-                                 key=f"{key_prefix}_bs_S", help=_HELP["S"])
+                                 key=f"{key_prefix}_bs_S_{ticker}", help=_HELP["S"])
         with cols[2]:
             K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default, 2)),
-                                 key=f"{key_prefix}_bs_K", help=_HELP["K"])
+                                 key=f"{key_prefix}_bs_K_{ticker}", help=_HELP["K"])
         with cols[3]:
             days = st.number_input("ימים לפקיעה", min_value=1, value=30,
                                     key=f"{key_prefix}_bs_days", help=_HELP["days"])
         with cols[4]:
-            sigma_pct = st.number_input("IV (%)", min_value=0.1, value=30.0,
-                                         key=f"{key_prefix}_bs_sigma", help=_HELP["sigma"])
+            _bs_iv_live = _try_fetch_atm_iv(ticker)
+            sigma_pct = st.number_input(
+                "IV (%)", min_value=0.1,
+                value=float(round(_bs_iv_live, 1)) if _bs_iv_live else 30.0,
+                key=f"{key_prefix}_bs_sigma_{ticker}", help=_HELP["sigma"],
+            )
+            if _bs_iv_live:
+                st.caption(f"נמשך אוטומטית משוק אמיתי: {_bs_iv_live:.1f}%")
 
         cols2 = st.columns(2)
         with cols2[0]:
@@ -324,10 +399,10 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                         key=f"{key_prefix}_iv_price", help=_HELP["iv_price"])
         with cols[2]:
             iv_S = st.number_input("מחיר נכס (S)", min_value=0.01, value=float(round(spot_default, 2)),
-                                    key=f"{key_prefix}_iv_S", help=_HELP["S"])
+                                    key=f"{key_prefix}_iv_S_{ticker}", help=_HELP["S"])
         with cols[3]:
             iv_K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default, 2)),
-                                    key=f"{key_prefix}_iv_K", help=_HELP["K"])
+                                    key=f"{key_prefix}_iv_K_{ticker}", help=_HELP["K"])
         with cols[4]:
             iv_days = st.number_input("ימים לפקיעה", min_value=1, value=30,
                                        key=f"{key_prefix}_iv_days", help=_HELP["days"])
@@ -427,16 +502,22 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         cols = st.columns(4)
         with cols[0]:
             prob_S = st.number_input("מחיר נכס (S)", min_value=0.01, value=float(round(spot_default, 2)),
-                                      key=f"{key_prefix}_prob_S", help=_HELP["S"])
+                                      key=f"{key_prefix}_prob_S_{ticker}", help=_HELP["S"])
         with cols[1]:
             prob_K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default * 0.9, 2)),
-                                      key=f"{key_prefix}_prob_K", help=_HELP["K"])
+                                      key=f"{key_prefix}_prob_K_{ticker}", help=_HELP["K"])
         with cols[2]:
             prob_days = st.number_input("ימים לפקיעה", min_value=1, value=30,
                                          key=f"{key_prefix}_prob_days", help=_HELP["days"])
         with cols[3]:
-            prob_sigma_pct = st.number_input("IV למודל (%)", min_value=0.1, value=30.0,
-                                              key=f"{key_prefix}_prob_sigma", help=_HELP["sigma"])
+            _prob_iv_live = _try_fetch_atm_iv(ticker)
+            prob_sigma_pct = st.number_input(
+                "IV למודל (%)", min_value=0.1,
+                value=float(round(_prob_iv_live, 1)) if _prob_iv_live else 30.0,
+                key=f"{key_prefix}_prob_sigma_{ticker}", help=_HELP["sigma"],
+            )
+            if _prob_iv_live:
+                st.caption(f"נמשך אוטומטית משוק אמיתי: {_prob_iv_live:.1f}%")
 
         prob_r_pct = st.number_input("ריבית חסרת סיכון (%)", value=4.5,
                                       key=f"{key_prefix}_prob_r", help=_HELP["r"])
@@ -447,10 +528,17 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                             key=f"{key_prefix}_prob_premium", help=_HELP["iv_price"])
         with stress_cols[1]:
             prob_contracts = st.number_input("מספר חוזים", min_value=1, value=1,
-                                              key=f"{key_prefix}_prob_contracts")
+                                              key=f"{key_prefix}_prob_contracts", help=_HELP["contracts"])
         with stress_cols[2]:
             prob_capital = st.number_input("הון זמין ($, אופציונלי - להצגת % מההון)", min_value=0.0, value=0.0,
-                                            key=f"{key_prefix}_prob_capital")
+                                            key=f"{key_prefix}_prob_capital", help=_HELP["capital"])
+        liq_cols = st.columns(2)
+        with liq_cols[0]:
+            prob_volume = st.number_input("נפח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0, value=0,
+                                           key=f"{key_prefix}_prob_volume")
+        with liq_cols[1]:
+            prob_oi = st.number_input("עניין פתוח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0, value=0,
+                                       key=f"{key_prefix}_prob_oi")
 
         _prob_flag = f"{key_prefix}_prob_show"
         st.markdown(
@@ -477,8 +565,24 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             if normal_prob is not None:
                 available_for_diff["מודל"] = normal_prob
 
-            grid_normal = _metric("הסתברות OTM - מודל", f"{normal_prob:.1%}" if normal_prob is not None else "—")
-            _card("מודל (Black-Scholes)", f'<div class="rs-grid">{grid_normal}</div>')
+            breakeven = short_put_breakeven(strike=prob_K, premium=prob_premium)
+            grid_normal = "".join([
+                _metric("הסתברות OTM - מודל", f"{normal_prob:.1%}" if normal_prob is not None else "—"),
+                _metric(
+                    "Breakeven", f"${breakeven:,.2f}",
+                    tooltip="הסטרייק פחות הפרמיה שקיבלת. זה המחיר שמתחתיו העסקה מתחילה "
+                            "להפסיד בפועל - מעליו, הפרמיה מכסה את ההפסד המהותי במלואו.",
+                ),
+            ])
+            model_extra = ""
+            LIQUIDITY_THRESHOLD = 50
+            if 0 < prob_volume < LIQUIDITY_THRESHOLD or 0 < prob_oi < LIQUIDITY_THRESHOLD:
+                model_extra = (
+                    '<span class="rs-badge red" style="margin-top:8px; display:inline-block;">'
+                    f'נפח/עניין פתוח נמוכים ({int(prob_volume)}/{int(prob_oi)}) - המחיר עלול '
+                    'לא לשקף מסחר אמיתי</span>'
+                )
+            _card("מודל (Black-Scholes)", f'<div class="rs-grid">{grid_normal}</div>{model_extra}')
 
             # --- תזוזה צפויה - לא תלוי בהיסטוריה, זמין תמיד ------------------
             em = expected_move(S=prob_S, sigma=prob_sigma_pct / 100.0, T_days=prob_days)
@@ -496,6 +600,18 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 '</div>'
             )
             _card("תזוזה צפויה (Expected Move)", f'<div class="rs-grid">{grid_em}</div>{em_explain}')
+
+            # --- טבלת השוואה - HTML מותאם אישית, בטוח ל-RTL -----------------
+            _compare_key = f"{key_prefix}_compare_rows"
+            if _compare_key not in st.session_state:
+                st.session_state[_compare_key] = []
+
+            _fat_for_row = None
+            _rv_rank_for_row = None
+            add_col, export_col = st.columns([1, 1])
+            with add_col:
+                if st.button("➕ הוסף שורה", key=f"{key_prefix}_compare_add"):
+                    st.session_state[f"{key_prefix}_compare_pending"] = True
 
             # --- סטרס טסט - תרחישי % קבועים, לא תלוי בהיסטוריה --------------
             capital_arg = prob_capital if prob_capital > 0 else None
@@ -561,6 +677,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     )
                     _card("Fat-tail", f'<div class="rs-grid">{grid_fat}</div>{fat_explain}')
                     available_for_diff["Fat-tail"] = fat.otm_probability
+                    _fat_for_row = fat.otm_probability
                 else:
                     st.info(f"Fat-tail: {fat.note}")
 
@@ -580,6 +697,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     '</div>'
                 )
                 _card("RV Rank (תחליף זמני ל-IV Rank)", f'<div class="rs-grid">{grid_rv}</div>{rv_explain}')
+                _rv_rank_for_row = rank
 
                 pnl_dist = historical_short_put_pnl_distribution(
                     closes, strike=prob_K, dte_days=int(prob_days),
@@ -597,6 +715,97 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     )
                     _card("CVaR (Expected Shortfall)", f'<div class="rs-grid">{"".join(grid_cvar)}</div>{cvar_explain}')
 
+            if st.session_state.get(f"{key_prefix}_compare_pending"):
+                new_row = {
+                    "טיקר": ticker, "סטרייק": prob_K, "פרמיה": prob_premium, "IV (%)": prob_sigma_pct,
+                    "נפח": prob_volume, "עניין פתוח": prob_oi,
+                    "Breakeven": round(breakeven, 2),
+                    "הסתברות מודל (%)": round(normal_prob * 100, 1) if normal_prob is not None else None,
+                    "Fat-tail (%)": round(_fat_for_row * 100, 1) if _fat_for_row is not None else None,
+                    "RV Rank": round(_rv_rank_for_row, 0) if _rv_rank_for_row is not None else None,
+                    "מרחק (xEM)": round(em_distance, 2) if em_distance is not None else None,
+                    "נזילות": "⚠️ נמוכה" if (0 < prob_volume < 50 or 0 < prob_oi < 50) else "תקינה",
+                }
+                existing = next(
+                    (r for r in st.session_state[_compare_key]
+                     if r["טיקר"] == ticker and r["סטרייק"] == prob_K),
+                    None,
+                )
+                if existing is not None:
+                    existing.update(new_row)
+                else:
+                    st.session_state[_compare_key].append(new_row)
+                st.session_state[f"{key_prefix}_compare_pending"] = False
+
+            _rows_for_ticker = sorted(
+                [r for r in st.session_state[_compare_key] if r["טיקר"] == ticker],
+                key=lambda r: r["סטרייק"],
+            )
+            if _rows_for_ticker:
+                import pandas as pd
+                _df = pd.DataFrame(_rows_for_ticker)
+                with export_col:
+                    st.download_button(
+                        "⬇️ CSV", data=_df.to_csv(index=False).encode("utf-8-sig"),
+                        file_name=f"riskshield_{ticker}.csv", mime="text/csv",
+                        key=f"{key_prefix}_compare_export",
+                    )
+                st.markdown(
+                    f'<div class="rs-explain" style="margin-top:8px;">'
+                    f'טבלת השוואה - {ticker} (לפי סטרייק, לא לפי "כדאיות").</div>',
+                    unsafe_allow_html=True,
+                )
+
+                _metric_rows = [
+                    ("פרמיה", lambda r: f"${r['פרמיה']:.2f}"),
+                    ("IV (%)", lambda r: f"{r['IV (%)']:.1f}%"),
+                    ("הסתברות מודל OTM", lambda r: (
+                        f"{r['הסתברות מודל (%)']:.1f}%" if r["הסתברות מודל (%)"] is not None else "—"
+                    )),
+                    ("הסתברות Fat-tail OTM", lambda r: (
+                        f"{r.get('Fat-tail (%)'):.1f}%" if r.get("Fat-tail (%)") is not None else "—"
+                    )),
+                    ("RV Rank", lambda r: (
+                        f"{r.get('RV Rank'):.0f}" if r.get("RV Rank") is not None else "—"
+                    )),
+                    ("Breakeven", lambda r: f"${r['Breakeven']:.2f}"),
+                    ("מרחק (xEM)", lambda r: (
+                        f"{r['מרחק (xEM)']:.2f}x" if r["מרחק (xEM)"] is not None else "—"
+                    )),
+                    ("עניין פתוח / נפח", lambda r: (
+                        f"{'✅' if r['נזילות'] == 'תקינה' else '⚠️'} "
+                        f"{int(r['עניין פתוח'])} / {int(r['נפח'])}"
+                    )),
+                ]
+                _thead = "<th></th>" + "".join(
+                    f"<th>סטרייק {r['סטרייק']:g}</th>" for r in _rows_for_ticker
+                )
+                _trs = ""
+                for _label, _fmt in _metric_rows:
+                    _tds = "".join(f"<td>{_fmt(r)}</td>" for r in _rows_for_ticker)
+                    _trs += f"<tr><td>{_label}</td>{_tds}</tr>"
+                st.markdown(
+                    f'<table class="rs-table"><thead><tr>{_thead}</tr></thead>'
+                    f'<tbody>{_trs}</tbody></table>',
+                    unsafe_allow_html=True,
+                )
+
+                del_col1, del_col2 = st.columns([3, 1])
+                with del_col1:
+                    _strike_to_delete = st.selectbox(
+                        "מחיקת שורה - בחרי סטרייק",
+                        options=[r["סטרייק"] for r in _rows_for_ticker],
+                        key=f"{key_prefix}_compare_del_select",
+                    )
+                with del_col2:
+                    st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+                    if st.button("🗑️ מחק", key=f"{key_prefix}_compare_del_btn"):
+                        st.session_state[_compare_key] = [
+                            r for r in st.session_state[_compare_key]
+                            if not (r["טיקר"] == ticker and r["סטרייק"] == _strike_to_delete)
+                        ]
+                        st.rerun()
+
             # --- פערי מודלים - עובדה, לא ציון ------------------------------
             if len(available_for_diff) >= 2:
                 spread = max(available_for_diff.values()) - min(available_for_diff.values())
@@ -612,6 +821,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                         unsafe_allow_html=True,
                     )
 
+
         st.markdown('<hr style="border-color: rgba(255,255,255,.08); margin: 24px 0;">', unsafe_allow_html=True)
         st.markdown(
             '<div class="rs-explain" style="margin-bottom:12px;">'
@@ -622,18 +832,18 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         prot_cols = st.columns(4)
         with prot_cols[0]:
             prot_shares = st.number_input("מניות מוחזקות", min_value=1, value=100,
-                                           key=f"{key_prefix}_prot_shares")
+                                           key=f"{key_prefix}_prot_shares", help=_HELP["prot_shares"])
         with prot_cols[1]:
             prot_entry = st.number_input("מחיר עלות המניה", min_value=0.01, value=float(round(spot_default, 2)),
-                                          key=f"{key_prefix}_prot_entry")
+                                          key=f"{key_prefix}_prot_entry_{ticker}", help=_HELP["prot_entry"])
         with prot_cols[2]:
             prot_strike = st.number_input("סטרייק הפוט המגן", min_value=0.01, value=float(round(spot_default * 0.9, 2)),
-                                           key=f"{key_prefix}_prot_strike")
+                                           key=f"{key_prefix}_prot_strike_{ticker}", help=_HELP["prot_strike"])
         with prot_cols[3]:
             prot_premium = st.number_input("פרמיית הפוט ($)", min_value=0.01, value=5.0,
-                                            key=f"{key_prefix}_prot_premium")
+                                            key=f"{key_prefix}_prot_premium", help=_HELP["iv_price"])
         prot_contracts = st.number_input("מספר חוזי פוט", min_value=1, value=1,
-                                          key=f"{key_prefix}_prot_contracts")
+                                          key=f"{key_prefix}_prot_contracts", help=_HELP["contracts"])
 
         _prot_flag = f"{key_prefix}_prot_show"
         st.markdown(

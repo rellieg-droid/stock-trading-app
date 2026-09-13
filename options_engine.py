@@ -734,6 +734,15 @@ def insurance_cost(premium: float, contracts: float) -> float:
     return premium * CONTRACT_MULTIPLIER * contracts
 
 
+def short_put_breakeven(strike: float, premium: float) -> float:
+    """
+    נקודת האיזון של שורט-פוט: המחיר שמתחתיו העסקה מתחילה להפסיד בפועל
+    (אחרי שהפרמיה כבר כוסתה במלואה). strike - premium, לא יותר מזה -
+    אבל ממורכז כאן כדי שלא ייכתב שוב בכל מקום.
+    """
+    return strike - premium
+
+
 def collar(shares: int, stock_entry: float, put_strike: float, put_premium: float,
            call_strike: float, call_premium: float, contracts: int | None = None) -> Position:
     """מניה + פוט מגן + קול כתוב שמממן אותו."""
