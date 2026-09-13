@@ -677,6 +677,63 @@ def protective_put(shares: int, stock_entry: float, put_strike: float,
     )
 
 
+# =============================================================================
+# 4b. טבלת הגנה - כמה PUT מגן שווה בפועל, בדולרים, בכל תרחיש
+# =============================================================================
+#
+# בונה על protective_put()/Position/Leg הקיימים. אין כאן ציון "הגנה", אין
+# "הגנה הכי טובה" - רק המספרים הגולמיים בכל תרחיש, כמו שכל שאר הטבלאות
+# בקובץ הזה עובדות.
+
+_DEFAULT_PROTECTION_MOVES = (0.0, -0.10, -0.20, -0.30, -0.40, -0.50, -0.60)
+
+
+@dataclass(frozen=True)
+class ProtectionRow:
+    pct_move: float
+    stressed_price: float
+    unhedged_pnl: float       # P/L של מניה בלבד, בלי ביטוח
+    hedged_pnl: float         # P/L של מניה + פוט מגן
+    protection_amount: float  # hedged_pnl - unhedged_pnl: כמה ההגנה שיפרה את התוצאה
+    protection_pct: float | None  # % מההפסד (הלא-מוגן) שקוזז. None אם לא הייתה הפסד מלכתחילה
+
+
+def protection_table(
+    shares: int,
+    stock_entry: float,
+    strike: float,
+    premium: float,
+    contracts: int | None = None,
+    pct_moves: Sequence[float] = _DEFAULT_PROTECTION_MOVES,
+) -> list[ProtectionRow]:
+    """
+    משווה P/L של 'מניה בלבד' מול 'מניה + פוט מגן' על פני סדרת תרחישי ירידה.
+    protection_pct מחושב רק כשהייתה הפסד ללא הגנה (unhedged_pnl < 0) - אחרת
+    השאלה 'כמה % מההפסד קוזז' לא מוגדרת, ומוצג None ולא 0 או ערך שרירותי.
+    """
+    hedged = protective_put(shares, stock_entry, strike, premium, contracts)
+    unhedged = Position(legs=[Leg("stock", +1, shares, stock_entry, label="מניות בלבד")])
+
+    rows = []
+    for pct in pct_moves:
+        price = stock_entry * (1.0 + pct)
+        unhedged_pnl = unhedged.payoff_at(price)
+        hedged_pnl = hedged.payoff_at(price)
+        protection_amount = hedged_pnl - unhedged_pnl
+        protection_pct = (protection_amount / -unhedged_pnl) if unhedged_pnl < 0 else None
+        rows.append(ProtectionRow(
+            pct_move=pct, stressed_price=price,
+            unhedged_pnl=unhedged_pnl, hedged_pnl=hedged_pnl,
+            protection_amount=protection_amount, protection_pct=protection_pct,
+        ))
+    return rows
+
+
+def insurance_cost(premium: float, contracts: float) -> float:
+    """עלות הביטוח בדולרים: פרמיה × 100 × חוזים. לא כולל עמלות (מתווספות בשכבת ה-UI אם רלוונטי)."""
+    return premium * CONTRACT_MULTIPLIER * contracts
+
+
 def collar(shares: int, stock_entry: float, put_strike: float, put_premium: float,
            call_strike: float, call_premium: float, contracts: int | None = None) -> Position:
     """מניה + פוט מגן + קול כתוב שמממן אותו."""
@@ -853,3 +910,73 @@ def pop_iron_condor(short_put_delta: float, short_call_delta: float) -> float:
     בדלתא 0.15 משני הצדדים התוצאה היא כ-70%, לא 85%.
     """
     return max(0.0, 1.0 - abs(short_put_delta) - abs(short_call_delta))
+
+
+# =============================================================================
+# 6. סטרס טסט ו-CVaR לשורט-פוט - בונה על Leg/Position הקיימים, לא מכפיל נוסחה
+# =============================================================================
+
+_DEFAULT_STRESS_MOVES = (0.20, 0.10, 0.0, -0.10, -0.20, -0.30, -0.40, -0.50)
+
+
+@dataclass(frozen=True)
+class StressTestRow:
+    pct_move: float                  # לדוגמה -0.30 = ירידה של 30%
+    stressed_price: float
+    pnl: float
+    pct_of_capital: float | None      # None אם לא סופק הון זמין
+
+
+def stress_test_table(
+    S: float,
+    strike: float,
+    premium: float,
+    contracts: int,
+    available_capital: float | None = None,
+    pct_moves: Sequence[float] = _DEFAULT_STRESS_MOVES,
+) -> list[StressTestRow]:
+    """
+    P/L לפוזיציית שורט-פוט יחיד (cash-secured/naked) על פני תרחישי % קבועים.
+    משתמש ב-Position/Leg הקיים - לא נוסחת PnL עצמאית.
+    """
+    position = Position(legs=[Leg("put", -1, contracts, premium, strike, label="שורט פוט")])
+    rows = []
+    for pct in pct_moves:
+        stressed_price = S * (1.0 + pct)
+        pnl = position.payoff_at(stressed_price)
+        pct_of_capital = (pnl / available_capital) if available_capital else None
+        rows.append(StressTestRow(pct_move=pct, stressed_price=stressed_price, pnl=pnl, pct_of_capital=pct_of_capital))
+    return rows
+
+
+def historical_short_put_pnl_distribution(
+    closes: Sequence[float],
+    strike: float,
+    dte_days: int,
+    premium: float,
+    contracts: int,
+) -> list[float]:
+    """
+    פילוג P/L אמפירי: לכל יום מסחר היסטורי, מה היה ה-P/L של שורט-פוט הזה
+    אילו נפתח אז ופג dte_days ימים קדימה, לפי המחיר שבאמת קרה. אותה שיטת
+    'מחיר עתידי' כמו historical_put_otm_probability - לא נוסחה חדשה.
+    """
+    n = len(closes)
+    total = n - dte_days
+    if total <= 0:
+        return []
+    position = Position(legs=[Leg("put", -1, contracts, premium, strike, label="שורט פוט")])
+    return [position.payoff_at(closes[i + dte_days]) for i in range(total)]
+
+
+def expected_shortfall(pnl_distribution: Sequence[float], tail_fraction: float = 0.05) -> float | None:
+    """
+    CVaR: ממוצע ה-tail_fraction (ברירת מחדל 5%) הגרועים בפילוג. None אם
+    הפילוג ריק. פונקציה גנרית - לא תלויה בסוג הפוזיציה שהפיקה את הפילוג.
+    """
+    if not pnl_distribution:
+        return None
+    ordered = sorted(pnl_distribution)
+    n_tail = max(1, int(len(ordered) * tail_fraction))
+    worst = ordered[:n_tail]
+    return sum(worst) / len(worst)

@@ -31,6 +31,8 @@ from options_engine import (
     historical_put_otm_probability, fat_tail_otm_probability,
     rv_rank, rv_percentile,
     expected_move, strike_distance_in_expected_moves,
+    stress_test_table, historical_short_put_pnl_distribution, expected_shortfall,
+    protection_table, insurance_cost,
 )
 
 # ---------------------------------------------------------------------------
@@ -405,6 +407,17 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         prob_r_pct = st.number_input("ריבית חסרת סיכון (%)", value=4.5,
                                       key=f"{key_prefix}_prob_r", help=_HELP["r"])
 
+        stress_cols = st.columns(3)
+        with stress_cols[0]:
+            prob_premium = st.number_input("פרמיה שהתקבלה ($)", min_value=0.01, value=2.0,
+                                            key=f"{key_prefix}_prob_premium", help=_HELP["iv_price"])
+        with stress_cols[1]:
+            prob_contracts = st.number_input("מספר חוזים", min_value=1, value=1,
+                                              key=f"{key_prefix}_prob_contracts")
+        with stress_cols[2]:
+            prob_capital = st.number_input("הון זמין ($, אופציונלי - להצגת % מההון)", min_value=0.0, value=0.0,
+                                            key=f"{key_prefix}_prob_capital")
+
         if st.button("חשב הסתברות OTM", key=f"{key_prefix}_prob_calc"):
             # --- מודל 1: Normal (Black-Scholes) - קיים כבר, רק נחשף כאן ---
             try:
@@ -439,6 +452,26 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 '</div>'
             )
             _card("תזוזה צפויה (Expected Move)", f'<div class="rs-grid">{grid_em}</div>{em_explain}')
+
+            # --- סטרס טסט - תרחישי % קבועים, לא תלוי בהיסטוריה --------------
+            capital_arg = prob_capital if prob_capital > 0 else None
+            stress_rows = stress_test_table(
+                S=prob_S, strike=prob_K, premium=prob_premium, contracts=int(prob_contracts),
+                available_capital=capital_arg,
+            )
+            grid_stress = []
+            for row in stress_rows:
+                label = f"{row.pct_move:+.0%} (${row.stressed_price:,.0f})"
+                value = f"${row.pnl:,.2f}"
+                if capital_arg:
+                    value += f" ({row.pct_of_capital:+.1%})"
+                grid_stress.append(_metric(label, value))
+            stress_explain = (
+                '<div class="rs-explain">P/L של שורט-פוט יחיד בתרחישי % קבועים ביחס למחיר הנוכחי - '
+                'משתמש באותו מנוע payoff כמו שאר האסטרטגיות בקובץ, לא נוסחה נפרדת. '
+                'בסוגריים: % מההון הזמין, אם הוזן.</div>'
+            )
+            _card("סטרס טסט", f'<div class="rs-grid">{"".join(grid_stress)}</div>{stress_explain}')
 
             # --- מודלים 2+3 דורשים היסטוריית מחירים -----------------------
             closes = _try_fetch_closes(ticker, period="10y")
@@ -504,6 +537,22 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 )
                 _card("RV Rank (תחליף זמני ל-IV Rank)", f'<div class="rs-grid">{grid_rv}</div>{rv_explain}')
 
+                pnl_dist = historical_short_put_pnl_distribution(
+                    closes, strike=prob_K, dte_days=int(prob_days),
+                    premium=prob_premium, contracts=int(prob_contracts),
+                )
+                es = expected_shortfall(pnl_dist, tail_fraction=0.05)
+                if es is not None:
+                    grid_cvar = [_metric("CVaR (5% הגרועים ביותר)", f"${es:,.2f}")]
+                    if capital_arg:
+                        grid_cvar.append(_metric("CVaR כ-% מההון", f"{es / capital_arg:+.1%}"))
+                    cvar_explain = (
+                        '<div class="rs-explain">ממוצע ה-P/L ב-5% התרחישים ההיסטוריים הגרועים ביותר '
+                        f'(מתוך {len(pnl_dist)} תקופות היסטוריות בפועל) - לא תרחיש קיצון בודד ושרירותי, '
+                        'אלא ממוצע על פני כל הפעמים שבאמת היה גרוע.</div>'
+                    )
+                    _card("CVaR (Expected Shortfall)", f'<div class="rs-grid">{"".join(grid_cvar)}</div>{cvar_explain}')
+
             # --- פערי מודלים - עובדה, לא ציון ------------------------------
             if len(available_for_diff) >= 2:
                 spread = max(available_for_diff.values()) - min(available_for_diff.values())
@@ -518,4 +567,50 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                         '</div>',
                         unsafe_allow_html=True,
                     )
+
+        st.markdown('<hr style="border-color: rgba(255,255,255,.08); margin: 24px 0;">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="rs-explain" style="margin-bottom:12px;">'
+            '🛡️ <b>צד ההגנה (קניית פוט)</b>: כמה הגנה בדולרים נותן פוט מגן על מניות             שכבר מחזיקים, בכל תרחיש ירידה. לא תלוי בחישוב ההסתברות למעלה - קלט נפרד.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        prot_cols = st.columns(4)
+        with prot_cols[0]:
+            prot_shares = st.number_input("מניות מוחזקות", min_value=1, value=100,
+                                           key=f"{key_prefix}_prot_shares")
+        with prot_cols[1]:
+            prot_entry = st.number_input("מחיר עלות המניה", min_value=0.01, value=float(round(spot_default, 2)),
+                                          key=f"{key_prefix}_prot_entry")
+        with prot_cols[2]:
+            prot_strike = st.number_input("סטרייק הפוט המגן", min_value=0.01, value=float(round(spot_default * 0.9, 2)),
+                                           key=f"{key_prefix}_prot_strike")
+        with prot_cols[3]:
+            prot_premium = st.number_input("פרמיית הפוט ($)", min_value=0.01, value=5.0,
+                                            key=f"{key_prefix}_prot_premium")
+        prot_contracts = st.number_input("מספר חוזי פוט", min_value=1, value=1,
+                                          key=f"{key_prefix}_prot_contracts")
+
+        if st.button("חשב הגנה", key=f"{key_prefix}_prot_calc"):
+            cost = insurance_cost(prot_premium, prot_contracts)
+            rows = protection_table(
+                shares=int(prot_shares), stock_entry=prot_entry, strike=prot_strike,
+                premium=prot_premium, contracts=int(prot_contracts),
+            )
+            grid_prot = [_metric("עלות הביטוח", f"${cost:,.2f}")]
+            for row in rows:
+                label = f"{row.pct_move:+.0%} (${row.stressed_price:,.0f})"
+                if row.protection_pct is not None:
+                    value = f"${row.protection_amount:,.2f} ({row.protection_pct:+.0%})"
+                else:
+                    value = f"${row.protection_amount:,.2f} (אין הפסד ללא הגנה)"
+                grid_prot.append(_metric(label, value))
+            prot_explain = (
+                '<div class="rs-explain">כל תא: כמה הפוט המגן שיפר את התוצאה לעומת '
+                'מניה בלבד, באותו תרחיש (בסוגריים: % מההפסד הלא-מוגן שקוזז). ליד/מעל '
+                'הסטרייק זה יכול להיות שלילי - שילמת פרמיה לפני שההגנה נכנסה לתוקף, '
+                'זה תקין ולא שגיאה.</div>'
+            )
+            _card("טבלת הגנה", f'<div class="rs-grid">{"".join(grid_prot)}</div>{prot_explain}')
+
     st.markdown('</div>', unsafe_allow_html=True)
