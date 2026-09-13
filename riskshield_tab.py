@@ -75,6 +75,10 @@ _CSS = """
 .rs-badge.yellow { background: rgba(234,179,8,.14);  color: var(--c-yellow, #eab308); }
 .rs-badge.red    { background: rgba(239,68,68,.14);  color: var(--c-red,    #ef4444); }
 .rs-badge.gray   { background: rgba(139,147,161,.14);color: var(--c-text-2, #8B93A7); }
+.rs-btn-help {
+  display: inline-block; cursor: help; font-size: 0.78rem;
+  color: var(--c-text-2, #8B93A7); margin-bottom: 6px;
+}
 
 /* תיקון נראות אייקון ה-tooltip (❓) של Streamlit - ה-CSS הגלובלי הכהה של
    האפליקציה כנראה דורס את הצבע המקורי שלו לצבע קרוב מדי לרקע. */
@@ -280,7 +284,15 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                      key=f"{key_prefix}_bs_q", help=_HELP["q"])
 
         _bs_flag = f"{key_prefix}_bs_show"
-        if st.button("חשב", key=f"{key_prefix}_bs_calc") or st.session_state.get(_bs_flag):
+        st.markdown(
+            '<span class="rs-btn-help" title="מחשב מחיר ואת כל הגריקס (Delta/Gamma/Vega/Theta) והסתברות OTM לפי המודל, מהערכים שהוזנו למעלה.">❓</span>',
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "חשב", key=f"{key_prefix}_bs_calc",
+            help="מחשב מחיר ואת כל הגריקס (Delta/Gamma/Vega/Theta) והסתברות OTM לפי המודל, "
+                 "מהערכים שהוזנו למעלה.",
+        ) or st.session_state.get(_bs_flag):
             st.session_state[_bs_flag] = True
             try:
                 g: Greeks = bs_greeks(
@@ -324,7 +336,15 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                     key=f"{key_prefix}_iv_r", help=_HELP["r"])
 
         _iv_flag = f"{key_prefix}_iv_show"
-        if st.button("חשב תנודתיות גלומה", key=f"{key_prefix}_iv_calc") or st.session_state.get(_iv_flag):
+        st.markdown(
+            '<span class="rs-btn-help" title="פותר אחורה איזו IV מסבירה את מחיר השוק שהוזן, ושומר את התצפית לאיסוף היסטוריית IV (לצורך IV Rank אמיתי בעתיד).">❓</span>',
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "חשב תנודתיות גלומה", key=f"{key_prefix}_iv_calc",
+            help="פותר אחורה איזו IV מסבירה את מחיר השוק שהוזן, ושומר את התצפית "
+                 "לאיסוף היסטוריית IV (לצורך IV Rank אמיתי בעתיד).",
+        ) or st.session_state.get(_iv_flag):
             st.session_state[_iv_flag] = True
             try:
                 iv_result = implied_vol(
@@ -352,7 +372,15 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             window = st.number_input("חלון (ימי מסחר)", min_value=5, value=min(252, len(closes)),
                                       key=f"{key_prefix}_rv_window", help=_HELP["rv_window"])
             _rv_flag = f"{key_prefix}_rv_show"
-            if st.button("חשב תנודתיות ממומשת", key=f"{key_prefix}_rv_calc") or st.session_state.get(_rv_flag):
+            st.markdown(
+                '<span class="rs-btn-help" title="מחשב RV מהיסטוריית המחירים בפועל (לא ממה שהשוק מצפה), ומשווה אותו ל-IV שתזיני.">❓</span>',
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "חשב תנודתיות ממומשת", key=f"{key_prefix}_rv_calc",
+                help="מחשב RV מהיסטוריית המחירים בפועל (לא ממה שהשוק מצפה), "
+                     "ומשווה אותו ל-IV שתזיני.",
+            ) or st.session_state.get(_rv_flag):
                 st.session_state[_rv_flag] = True
                 rv = realized_vol(closes, window=int(window))
                 grid = _metric("RV (שנתי)", f"{rv:.1%}")
@@ -425,7 +453,15 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                             key=f"{key_prefix}_prob_capital")
 
         _prob_flag = f"{key_prefix}_prob_show"
-        if st.button("חשב הסתברות OTM", key=f"{key_prefix}_prob_calc") or st.session_state.get(_prob_flag):
+        st.markdown(
+            '<span class="rs-btn-help" title="מריץ בבת אחת: הסתברות לפי שלושה מודלים נפרדים, תזוזה צפויה, סטרס טסט ו-CVaR. חלק מהתוצאות דורשות היסטוריית מחירים (yfinance).">❓</span>',
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "חשב הסתברות OTM", key=f"{key_prefix}_prob_calc",
+            help="מריץ בבת אחת: הסתברות לפי שלושה מודלים נפרדים, תזוזה צפויה, "
+                 "סטרס טסט ו-CVaR. חלק מהתוצאות דורשות היסטוריית מחירים (yfinance).",
+        ) or st.session_state.get(_prob_flag):
             st.session_state[_prob_flag] = True
             # --- מודל 1: Normal (Black-Scholes) - קיים כבר, רק נחשף כאן ---
             try:
@@ -600,7 +636,15 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                           key=f"{key_prefix}_prot_contracts")
 
         _prot_flag = f"{key_prefix}_prot_show"
-        if st.button("חשב הגנה", key=f"{key_prefix}_prot_calc") or st.session_state.get(_prot_flag):
+        st.markdown(
+            '<span class="rs-btn-help" title="משווה מניה בלבד מול מניה+פוט מגן בכל תרחיש ירידה, ומראה כמה דולרים ואיזה אחוז מההפסד הלא-מוגן ההגנה קיזזה.">❓</span>',
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "חשב הגנה", key=f"{key_prefix}_prot_calc",
+            help="משווה מניה בלבד מול מניה+פוט מגן בכל תרחיש ירידה, "
+                 "ומראה כמה דולרים ואיזה אחוז מההפסד הלא-מוגן ההגנה קיזזה.",
+        ) or st.session_state.get(_prot_flag):
             st.session_state[_prot_flag] = True
             cost = insurance_cost(prot_premium, prot_contracts)
             rows = protection_table(
