@@ -243,6 +243,47 @@ def rv_percentile(
 
 
 # =============================================================================
+# 1e. תזוזה צפויה (Expected Move) ומרחק הסטרייק ממנה
+# =============================================================================
+#
+# קירוב מהנוסחה הסטנדרטית S*IV*sqrt(T), לא מ-ATM straddle (מדויק יותר אבל
+# דורש מחירי אופציות בפועל - לא זמין כאן כרגע). מתויג ככזה בפלט.
+
+
+@dataclass(frozen=True)
+class ExpectedMove:
+    move: float          # תזוזה צפויה בדולרים (סטיית תקן אחת, לא טווח מובטח)
+    low: float           # S - move
+    high: float          # S + move
+    method: str = "formula"  # "formula" (S*IV*sqrt(T)) לעומת "straddle" (לא ממומש עדיין)
+
+
+def expected_move(S: float, sigma: float, T_days: float) -> ExpectedMove:
+    """
+    תזוזה צפויה = S * sigma * sqrt(T בשנים). זו סטיית תקן אחת - כ-68% מהמקרים
+    (בהנחת התפלגות נורמלית, שכבר ידוע לנו שלא תמיד מחזיקה - ראו מודל Fat-tail).
+    """
+    if S <= 0:
+        raise ValueError("S must be positive")
+    if sigma < 0:
+        raise ValueError("sigma must be non-negative")
+    if T_days < 0:
+        raise ValueError("T_days must be non-negative")
+    move = S * sigma * sqrt(T_days / 365.0)
+    return ExpectedMove(move=move, low=S - move, high=S + move, method="formula")
+
+
+def strike_distance_in_expected_moves(S: float, K: float, move: float) -> float | None:
+    """
+    כמה 'תזוזות צפויות' מרוחק הסטרייק מהמחיר הנוכחי. חיובי = הסטרייק מתחת
+    למחיר (רלוונטי לפוט). None אם move==0 (למשל IV=0 או T=0) - לא חלוקה באפס.
+    """
+    if move == 0:
+        return None
+    return (S - K) / move
+
+
+# =============================================================================
 # 1c. הסתברות היסטורית ו-Fat-tail
 # =============================================================================
 #

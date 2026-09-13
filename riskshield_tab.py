@@ -30,6 +30,7 @@ from options_engine import (
     bs_greeks, norm_cdf, realized_vol, implied_vol, iv_rv_ratio, Greeks,
     historical_put_otm_probability, fat_tail_otm_probability,
     rv_rank, rv_percentile,
+    expected_move, strike_distance_in_expected_moves,
 )
 
 # ---------------------------------------------------------------------------
@@ -421,6 +422,23 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
 
             grid_normal = _metric("הסתברות OTM - מודל", f"{normal_prob:.1%}" if normal_prob is not None else "—")
             _card("מודל (Black-Scholes)", f'<div class="rs-grid">{grid_normal}</div>')
+
+            # --- תזוזה צפויה - לא תלוי בהיסטוריה, זמין תמיד ------------------
+            em = expected_move(S=prob_S, sigma=prob_sigma_pct / 100.0, T_days=prob_days)
+            em_distance = strike_distance_in_expected_moves(S=prob_S, K=prob_K, move=em.move)
+            grid_em = "".join([
+                _metric("תזוזה צפויה", f"±${em.move:,.2f}"),
+                _metric("טווח צפוי", f"${em.low:,.2f} - ${em.high:,.2f}"),
+                _metric("מרחק הסטרייק", f"{em_distance:.2f}x תזוזה צפויה" if em_distance is not None else "—"),
+            ])
+            em_explain = (
+                '<div class="rs-explain">קירוב מהנוסחה S×IV×√T (סטיית תקן אחת, לא טווח '
+                'מובטח - בהנחת התפלגות נורמלית, שראינו שלא תמיד מחזיקה). מרחק הסטרייק '
+                'חיובי אומר שהוא מתחת למחיר הנוכחי; ככל שהמספר גבוה יותר, הסטרייק רחוק '
+                'יותר ביחס לתזוזה הצפויה.'
+                '</div>'
+            )
+            _card("תזוזה צפויה (Expected Move)", f'<div class="rs-grid">{grid_em}</div>{em_explain}')
 
             # --- מודלים 2+3 דורשים היסטוריית מחירים -----------------------
             closes = _try_fetch_closes(ticker, period="10y")
