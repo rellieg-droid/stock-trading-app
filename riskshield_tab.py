@@ -208,6 +208,53 @@ def _try_fetch_closes(ticker: str, period: str = "1y") -> Optional[list]:
 
 
 # ---------------------------------------------------------------------------
+# סורק רב-מניות - שכבת ריכוז בלבד. שואבת עם אותם _try_fetch_* שכבר בקובץ,
+# מחשבת עם build_screener_row (options_engine.py) - אין כאן נוסחה חדשה.
+# ---------------------------------------------------------------------------
+
+def _run_screener(
+    tickers,
+    target_put_delta: float = 0.20,
+    dte_days: int = 30,
+    closes_period: str = "10y",
+):
+    """
+    מריצה build_screener_row על כל טיקר ברשימה, טיקר אחרי טיקר (לא
+    במקביל - yfinance לא אוהב הצפה של בקשות). טיקר שנכשל בשליפת מחיר
+    (סימבול שגוי / בעיית רשת) לא מפיל את כל הסריקה - הוא מקבל שורה עם
+    note בלבד, שאר העמודות NaN, בדיוק כמו שאר ה-_try_fetch_* בקובץ
+    שנכשלים בשקט. מחזירה pandas.DataFrame, שורה אחת לטיקר.
+    """
+    import pandas as pd
+    from dataclasses import asdict
+    from options_engine import build_screener_row
+
+    rows = []
+    for raw_ticker in tickers:
+        ticker = raw_ticker.strip().upper()
+        if not ticker:
+            continue
+
+        spot = _try_fetch_spot(ticker)
+        if spot is None:
+            rows.append({"ticker": ticker, "spot": None,
+                        "note": "לא נמצא מחיר - טיקר שגוי או בעיית רשת"})
+            continue
+
+        closes = _try_fetch_closes(ticker, period=closes_period)
+        iv_pct = _try_fetch_atm_iv(ticker)
+        iv = (iv_pct / 100.0) if iv_pct is not None else None
+
+        row = build_screener_row(
+            ticker=ticker, S=spot, closes=closes, iv=iv,
+            target_put_delta=target_put_delta, dte_days=dte_days,
+        )
+        rows.append(asdict(row))
+
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
 # איסוף היסטוריית IV - תשתית ל-IV Rank אמיתי בעתיד. options_engine.py
 # נשאר טהור בכוונה; כל ה-I/O כאן, ליד ה-yfinance שכבר בקובץ הזה.
 # ---------------------------------------------------------------------------
