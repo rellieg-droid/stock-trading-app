@@ -83,7 +83,7 @@ _CSS = """
 }
 .rs-table { width:100%; border-collapse:collapse; direction:rtl; margin-top:8px; }
 .rs-table th, .rs-table td { padding:8px 10px; text-align:center; border-bottom:1px solid rgba(255,255,255,.08); white-space:nowrap; }
-.rs-table th { color: var(--c-text-2, #8B93A7); font-weight:600; font-size:.82rem; }
+.rs-table th { color: var(--c-text-1, #E7EAF0); font-weight:700; font-size:.82rem; }
 .rs-table td { font-weight:600; font-size:.9rem; }
 .rs-table tr:hover td { background: rgba(255,255,255,.03); }
 
@@ -964,6 +964,43 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             unsafe_allow_html=True,
         )
 
+        with st.expander("📖 מדריך: מה המטרה של הטבלה, ומאיפה המספרים מגיעים"):
+            st.markdown(
+                '<div class="rs-explain">'
+                '<b>מה זה בכלל עושה?</b><br>'
+                'לוקח רשימת מניות שאת נותנת, ומריץ על כל אחת את אותה שאלה בדיוק: '
+                '"אם הייתי כותבת (מוכרת) Put על המניה הזו, בסטרייק שנמצא באותו '
+                '\'מרחק יחסי\' מהמחיר הנוכחי (נקבע לפי הדלתא שבחרת), מה היו '
+                'המספרים?" המטרה היא להשוות הרבה מניות זו לזו במבט אחד - לא לומר '
+                'איזו לבחור.<br><br>'
+                '<b>מאיפה מגיעה "פרמיה תיאורטית"?</b><br>'
+                'מנוסחה מתמטית ידועה (Black-Scholes) - אותה נוסחה שגם עושי-שוק '
+                'משתמשים בה כנקודת פתיחה לתמחור אופציות. היא מקבלת 5 מספרים: מחיר '
+                'המניה כרגע, הסטרייק, כמה ימים נשארו לפקיעה, כמה תנועה השוק מצפה '
+                'מהמניה (IV, נשלף מהשוק האמיתי), וריבית חסרת סיכון - ומחשבת מהם '
+                '"מחיר הוגן" תיאורטי.<br><br>'
+                '<b>למה זה "עקבי להשוואה" אם זה לא המחיר האמיתי?</b><br>'
+                'כמו למדוד כמה חדרים באותו סרגל בדיוק - ההשוואה ביניהם אמינה, גם '
+                'אם הסרגל עצמו סוטה קצת מהמטר האמיתי. אותה נוסחה, באותה לוגיקה, '
+                'מופעלת על כל מניה בטבלה בלי יוצא מן הכלל - אז השוואה יחסית '
+                'ביניהן הגיונית, גם אם המספר המוחלט של כל אחת עלול להיות שונה '
+                'ממה שהברוקר יציע בפועל. מחיר שוק אמיתי מושפע גם מדברים שהמודל '
+                'לא רואה - כמה קונים/מוכרים יש כרגע על החוזה הספציפי, וכמה '
+                '"עמלת תיווך" (bid-ask spread) השוק גובה.<br><br>'
+                '<b>המסקנה המעשית:</b> אפשר לסמוך על הטבלה כדי לצמצם רשימה ארוכה '
+                'למועמדות שכדאי לבדוק לעומק - אבל לפני שסוגרים עסקה בפועל, תמיד '
+                'פותחים את שרשרת האופציות האמיתית אצל הברוקר ובודקים את המחיר '
+                'בפועל.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+        _scr_pending_key = f"{key_prefix}_scr_tickers_pending"
+        if _scr_pending_key in st.session_state:
+            # מותר לכתוב ל-session_state של ה-widget רק *לפני* שהוא נוצר -
+            # זו בדיוק הנקודה הזו, עוד לפני קריאת st.text_area שמתחת.
+            st.session_state[f"{key_prefix}_scr_tickers"] = st.session_state.pop(_scr_pending_key)
+
         scr_tickers_raw = st.text_area(
             "טיקרים (מופרדים בפסיק או בשורות נפרדות)",
             value="AAPL, MSFT, NVDA",
@@ -985,7 +1022,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             if st.button("📋 טעני מרשימת המעקב שלי", key=f"{key_prefix}_scr_wl_load"):
                 saved = _load_screener_watchlist()
                 if saved:
-                    st.session_state[f"{key_prefix}_scr_tickers"] = ", ".join(saved)
+                    st.session_state[_scr_pending_key] = ", ".join(saved)
                     st.rerun()
                 else:
                     st.info("רשימת המעקב ריקה עדיין.")
@@ -997,7 +1034,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             if st.button("📥 טעני מה-Watchlist הראשי", key=f"{key_prefix}_scr_wl_main"):
                 main_wl = st.session_state.get("watchlist", [])
                 if main_wl:
-                    st.session_state[f"{key_prefix}_scr_tickers"] = ", ".join(main_wl)
+                    st.session_state[_scr_pending_key] = ", ".join(main_wl)
                     st.rerun()
                 else:
                     st.info("ה-Watchlist הראשי ריק.")
@@ -1071,11 +1108,55 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     "breakeven", "prob_otm_model", "prob_otm_fat_tail",
                     "prob_otm_historical", "xem_distance", "cvar_5pct", "max_loss",
                 ] if c in scr_view.columns]
+
+                _scr_metric_labels = {
+                    "ticker": "טיקר", "spot": "מחיר", "strike": "סטרייק", "iv": "IV",
+                    "rv_rank": "RV Rank", "rv_percentile": "RV Percentile",
+                    "iv_rv_spread": "IV-RV (הפרש)", "expected_move_pct": "תזוזה צפויה (%)",
+                    "put_premium": "פרמיית הפוט", "put_delta": "דלתא בפועל",
+                    "breakeven": "Breakeven", "prob_otm_model": "הסתברות OTM - מודל",
+                    "prob_otm_fat_tail": "הסתברות OTM - Fat-tail",
+                    "prob_otm_historical": "הסתברות OTM - היסטורי", "xem_distance": "מרחק (xEM)",
+                    "cvar_5pct": "CVaR (5% הגרועים)", "max_loss": "הפסד מקסימלי",
+                }
+                _scr_metric_explain = {
+                    "ticker": "סימול המניה.",
+                    "spot": "מחיר המניה הנוכחי בשוק.",
+                    "strike": "מחיר המימוש שנבחר לפי הדלתא היעד שהוגדרה למעלה.",
+                    "iv": "תנודתיות גלומה - כמה תנועה השוק מצפה, לפי מחיר האופציה בפועל.",
+                    "rv_rank": "דירוג התנודתיות שהמניה הראתה בפועל (0-100) ביחס לטווח שלה. תחליף זמני ל-IV Rank.",
+                    "rv_percentile": "אחוז הימים בהיסטוריה שבהם ה-RV היה נמוך מהערך הנוכחי.",
+                    "iv_rv_spread": "ההפרש בין IV ל-RV. חיובי = השוק מתמחר יותר תנודתיות ממה שקרה בפועל.",
+                    "expected_move_pct": "התזוזה הצפויה עד הפקיעה, כאחוז מהמחיר הנוכחי (סטיית תקן אחת).",
+                    "put_premium": "פרמיית הפוט התיאורטית (Black-Scholes) - לא מחיר שוק בפועל.",
+                    "put_delta": "הדלתא בפועל של הסטרייק שנבחר - אמורה להיות קרובה לדלתא היעד שהוגדרה.",
+                    "breakeven": "המחיר שמתחתיו מוכר הפוט מתחיל להפסיד בפועל (סטרייק פחות פרמיה).",
+                    "prob_otm_model": "הסתברות (Black-Scholes) שהאופציה תפקע מחוץ לכסף.",
+                    "prob_otm_fat_tail": "אותה הסתברות OTM, לפי מודל עם \'זנבות שמנים\' (t-Student) במקום נורמלית.",
+                    "prob_otm_historical": "הסתברות OTM לפי מה שקרה בפועל בהיסטוריה, לא לפי מודל תיאורטי.",
+                    "xem_distance": "כמה \'תזוזות צפויות\' רחוק הסטרייק מהמחיר הנוכחי.",
+                    "cvar_5pct": "ממוצע ה-P/L ב-5% התרחישים ההיסטוריים הגרועים ביותר, לתקופה של dte_days ימים.",
+                    "max_loss": "ההפסד המקסימלי התיאורטי בפוזיציה (סטרייק פחות פרמיה, כפול 100 כפול חוזים).",
+                }
+
+                with st.expander("📖 הסבר לכל המדדים ברשימה"):
+                    _legend_html = "".join(
+                        f'<div class="rs-explain" style="margin-bottom:6px;">'
+                        f'<b>{_scr_metric_labels.get(c, c)}</b>: {_scr_metric_explain.get(c, "")}'
+                        f'</div>'
+                        for c in _sortable
+                    )
+                    st.markdown(_legend_html, unsafe_allow_html=True)
+
                 sort_ui = st.columns([2, 1])
                 with sort_ui[0]:
-                    sort_by = st.selectbox("מיין לפי", _sortable, index=0, key=f"{key_prefix}_scr_sort_by")
+                    sort_by = st.selectbox(
+                        "מיין לפי", _sortable, index=0, key=f"{key_prefix}_scr_sort_by",
+                        format_func=lambda c: _scr_metric_labels.get(c, c),
+                    )
                 with sort_ui[1]:
                     sort_desc = st.checkbox("יורד", value=False, key=f"{key_prefix}_scr_sort_desc")
+                st.caption(_scr_metric_explain.get(sort_by, ""))
                 scr_view = scr_view.sort_values(sort_by, ascending=not sort_desc, na_position="last")
 
                 st.download_button(
@@ -1094,7 +1175,10 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     "note": "הערה",
                 }
                 _shown = [c for c in _scr_headers if c in scr_view.columns]
-                _thead = "".join(f"<th>{_scr_headers[c]}</th>" for c in _shown)
+                _thead = "".join(
+                    f'<th title="{_scr_metric_explain.get(c, "")}">{_scr_headers[c]}</th>'
+                    for c in _shown
+                )
 
                 def _scr_fmt(col, val):
                     if val is None or (isinstance(val, float) and pd.isna(val)):
