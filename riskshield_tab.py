@@ -894,6 +894,60 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 f"{_cmp_table_html}{_cmp_explain}",
             )
 
+            with st.expander("📖 מדריך: מה ההבדל בין CSP ל-Bull Put Spread, ולמה הביטחונות כל כך שונים"):
+                st.markdown(
+                    '<div class="rs-explain"><b>מה זה בכלל CSP?</b><br>כשמוכרים פוט "מוגן במזומן" (Cash-Secured Put), הברוקר דורש שתחזיקי בחשבון את כל הסכום שיידרש אם תצטרכי לקנות את המניה במחיר הסטרייק - זו הסיבה שבטבלה אפשר לראות ביטחונות שמגיעים ל-100% ומעלה מהתיק - זה לא באג, זה בדיוק מה שקורה במציאות: אם המניה תיפול, הברוקר ידרוש ממך לקנות את כל המניות במחיר הסטרייק, ולכן הוא נועל את כל הסכום מראש - גם אם ההפסד המרבי בפועל קטן יותר (סטרייק פחות פרמיה, לא הסטרייק המלא).<br><br><b>מה שונה ב-Bull Put Spread?</b><br>עם אותה כתיבה בדיוק, קונים גם פוט הגנה בסטרייק נמוך יותר. ההגנה "עוצרת" את ההפסד המרבי ברוחב שבין שני הסטרייקים פחות הקרדיט שקיבלת - מספר ידוע מראש, במקום חושף של כל הסטרייק כמו ב-CSP. לכן הברוקר דורש הרבה פחות ביטחונות - בדוגמה שלמעלה, 1% בלבד מהתיק, לעומת 120%-360% ב-CSP.<br><br><b>המחיר של ה"הנחה" הזו</b><br>זה לא "ארוחת חינם" - שני דברים משתנים בתמורה: הפרמיה שמקבלים קטנה יותר (חלק ממנה הולך לקניית ההגנה), והרווח המקסימלי מוגבל לקרדיט הנטו שקיבלת - בעוד שב-CSP הרווח המקסימלי הוא כל הפרמיה שקיבלת, בלי תקרה.<br><br><b>איך לקרוא את יחס קרדיט/רוחב לאור ההסבר הזה</b><br>היחס מודד כמה מהרוחב המקסימלי בפועל מגיע בחזרה כקרדיט. יחס נמוך מדי מעיד שההגנה "אוכלת" חלק גדול מדי מהפרמיה - זו הסיבה שהכרטיס של מעלה מציג עובדתית (סף נפוץ: 20%-30%) - לא קביעה שמתאימה לכל מצב.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # --- בדיקות מול ספים נפוצים: DTE, יחס קרדיט/רוחב, נזילות -------
+            _dte_badge_cls = "green" if 30 <= int(prob_days) <= 45 else "gray"
+            _dte_badge = (
+                f'<span class="rs-badge {_dte_badge_cls}">DTE: {int(prob_days)} ימים '
+                f'(טווח 30-45 נפוץ לשחיקת תטא)</span>'
+            )
+
+            _width = prob_K - prob_protect_K
+            if _width > 0:
+                _cw_ratio = _bps_credit / (_width * CONTRACT_MULTIPLIER)
+                _cw_cls = "green" if _cw_ratio >= 0.20 else "yellow" if _cw_ratio >= 0.10 else "red"
+                _cw_badge = (
+                    f'<span class="rs-badge {_cw_cls}">יחס קרדיט/רוחב (Bull Put Spread): '
+                    f'{_cw_ratio:.0%} (סף נפוץ: 20%-30%)</span>'
+                )
+            else:
+                _cw_badge = (
+                    '<span class="rs-badge gray">יחס קרדיט/רוחב: לא ניתן לחשב - '
+                    'רוחב מרווח 0 או שלילי</span>'
+                )
+
+            _threshold_badges = [_dte_badge, _cw_badge]
+            if prob_capital:
+                for _label, _coll in [
+                    ("CSP (חוזה 1)", _csp1_collateral),
+                    ("CSP (3 חוזים)", _csp3_collateral),
+                    ("Bull Put Spread (חוזה 1)", _bps_collateral),
+                ]:
+                    _pct_locked = _coll / prob_capital
+                    _liq_cls = "green" if _pct_locked <= 0.5 else "yellow" if _pct_locked <= 0.75 else "red"
+                    _threshold_badges.append(
+                        f'<span class="rs-badge {_liq_cls}">{_label}: {_pct_locked:.0%} מהתיק נעול '
+                        f'(סף נזילות נפוץ: עד 50%)</span>'
+                    )
+
+            _thresholds_html = (
+                '<div style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">'
+                + "".join(_threshold_badges) + "</div>"
+            )
+            if not prob_capital:
+                _thresholds_html += (
+                    '<div class="rs-explain" style="margin-top:8px;">'
+                    'הזיני "הון זמין" למעלה כדי לראות איזה אחוז מהתיק כל אסטרטגיה '
+                    'נועלת כביטחונות.'
+                    '</div>'
+                )
+            _card("בדיקות מול ספים נפוצים", _thresholds_html)
+
             # --- מודלים 2+3 דורשים היסטוריית מחירים -----------------------
             closes = _try_fetch_closes(ticker, period="10y")
             if closes is None:
