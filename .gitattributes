@@ -1,0 +1,9 @@
+# קובץ זה קובע במפורש איזה סגנון שבירת שורות (CRLF/LF) שייך לכל קובץ,
+# כדי שזה לא יהיה תלוי בהגדרת core.autocrlf הגלובלית של גיט או של המשתמש.
+# בלי זה, autocrlf=true עלול להפוך קבצי LF ל-CRLF (ולהפך) בשקט בכל
+# checkout/clone - וזה בדיוק מה שגרם לבלבול ולאזהרות שראינו.
+
+alpha_paper_trading.py text eol=crlf
+riskshield_tab.py      text eol=lf
+options_engine.py      text eol=lf
+rr_tab.py              text eol=lf
