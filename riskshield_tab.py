@@ -39,6 +39,8 @@ from options_engine import (
     bull_put_spread, CONTRACT_MULTIPLIER,
 )
 
+from put_tracker_tab import render_put_tracker_tab
+
 # ---------------------------------------------------------------------------
 # עיצוב - אותה מוסכמת CSS כמו rr_tab.py, עם משתני CSS גלובליים ו-fallback
 # ---------------------------------------------------------------------------
@@ -438,7 +440,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             '<b>הסתברות OTM (Put)</b>: הטאב המורכב - לוקח את כל הכלים '
             'הקודמים ומיישם על שאלה ספציפית: "מה הסיכוי שהמניה תישאר מעל '
             'סטרייק מסוים עד הפקיעה?" לפי שלוש שיטות נפרדות, פלוס תזוזה '
-            'צפויה, סטרס טסט, CVaR, וטבלת הגנה (לצד קניית פוט).'
+            'צפויה, סטרס טסט, CVaR, וטבלת הגנה (לצד קניית פוט).<br><br>'
+            '<b>📒 מעקב פרמיות</b>: לא חישוב תיאורטי בכלל - יומן בפועל של פוזיציות PUT שמכרת. רושמים כל מכירה (סימבול, סטרייק, פרמיה), ומסמנים איך היא נסגרה (פקעה חסרת ערך / נקנתה בחזרה / הוקצתה) - והטאב מחשב לבד כמה פרמיה נגבתה בסך הכול, כמה כבר מומש כרווח, וכמה עדיין "תלוי באוויר" בפוזיציות פתוחות. אפשר גם למשוך נתונים ישירות מטאב הסתברות OTM במקום להקליד הכול ידנית.'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -459,8 +462,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             unsafe_allow_html=True,
         )
 
-    tab_bs, tab_iv, tab_rv, tab_prob, tab_screener = st.tabs(
-        ["מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)", "הסתברות OTM (Put)", "סורק רב-מניות"]
+    tab_bs, tab_iv, tab_rv, tab_prob, tab_screener, tab_tracker = st.tabs(
+        ["מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)", "הסתברות OTM (Put)", "סורק רב-מניות", "📒 מעקב פרמיות"]
     )
 
     # -------------------------------------------------------------------
@@ -1457,5 +1460,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     unsafe_allow_html=True,
                 )
                 st.caption(f"{len(scr_view)} מתוך {len(scr_df)} טיקרים מוצגים.")
+
+    with tab_tracker:
+        render_put_tracker_tab()
 
     st.markdown('</div>', unsafe_allow_html=True)
