@@ -25,7 +25,7 @@ from math import log as _log
 
 import sqlite3
 import json
-from datetime import date as _date
+from datetime import date as _date, timedelta as _timedelta
 
 from options_engine import (
     bs_greeks, norm_cdf, realized_vol, implied_vol, iv_rv_ratio, Greeks,
@@ -35,6 +35,8 @@ from options_engine import (
     stress_test_table, historical_short_put_pnl_distribution, expected_shortfall,
     protection_table, insurance_cost,
     short_put_breakeven,
+    size_position, Position, Leg,
+    bull_put_spread, CONTRACT_MULTIPLIER,
 )
 
 # ---------------------------------------------------------------------------
@@ -204,6 +206,68 @@ def _try_fetch_closes(ticker: str, period: str = "1y") -> Optional[list]:
         if hist.empty or len(hist) < 3:
             return None
         return hist["Close"].tolist()
+    except Exception:
+        return None
+
+
+def _try_fetch_otm_put_quote(
+    ticker: str, below_strike: float, dte_days: int = 30, target_delta: float = 0.15,
+) -> Optional[tuple[float, float]]:
+    """
+    שולפת מ-yfinance סטרייק ופרמיה אמיתיים (Ask) לפוט הגנה מחוץ לכסף,
+    מתחת ל-below_strike - הסטרייק שהדלתא שלו (מחושבת מה-IV הגלום בציטוט
+    עצמו, לא IV חיצוני) הכי קרובה ל-target_delta. משתמשת ב-bs_greeks הקיים -
+    לא נוסחת דלתא נפרדת. נכשלת בשקט (None) אם אין רשת, אין תפוגות
+    זמינות, או אין ציטוטי bid/ask תקינים מתחת לסטרייק המבוקש.
+    """
+    if not ticker or not below_strike or below_strike <= 0:
+        return None
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
+        expirations = tk.options
+        if not expirations:
+            return None
+
+        target_date = _date.today() + _timedelta(days=dte_days)
+        best_exp = min(expirations, key=lambda e: abs((_date.fromisoformat(e) - target_date).days))
+        actual_dte = (_date.fromisoformat(best_exp) - _date.today()).days
+        if actual_dte <= 0:
+            return None
+
+        puts = tk.option_chain(best_exp).puts
+        if puts is None or puts.empty:
+            return None
+
+        spot = _try_fetch_spot(ticker)
+        if spot is None:
+            return None
+
+        candidates = puts[
+            (puts["strike"] < below_strike) & (puts["bid"] > 0) & (puts["ask"] > 0)
+        ].copy()
+        if candidates.empty:
+            return None
+
+        T = actual_dte / 365.0
+
+        def _row_delta(row):
+            iv = row.get("impliedVolatility")
+            if iv is None or iv <= 0:
+                return None
+            try:
+                return abs(bs_greeks("put", spot, float(row["strike"]), T, float(iv)).delta)
+            except Exception:
+                return None
+
+        candidates["_delta"] = candidates.apply(_row_delta, axis=1)
+        candidates = candidates.dropna(subset=["_delta"])
+        if candidates.empty:
+            return None
+
+        best_idx = (candidates["_delta"] - target_delta).abs().idxmin()
+        best_row = candidates.loc[best_idx]
+        return float(best_row["strike"]), float(best_row["ask"])
     except Exception:
         return None
 
@@ -616,6 +680,43 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             prob_oi = st.number_input("עניין פתוח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0, value=0,
                                        key=f"{key_prefix}_prob_oi")
 
+        # --- רגל הגנה ל-Bull Put Spread - לצורך השוואת הון/ביטחונות למטה --------
+        _protect_live = _try_fetch_otm_put_quote(ticker, below_strike=prob_K, dte_days=int(prob_days))
+        # Streamlit מתעלם מ-value= ברגע שלשדה כבר יש ערך שמור ב-session_state -
+        # לכן מעדכנים בכוח רק כשהטיקר/הסטרייק/ה-DTE השתנו מאז השליפה
+        # האחרונה - כדי לא לדרוס עריכה ידנית שעוד רלוונטית.
+        _protect_sig_key = f"{key_prefix}_prob_protect_sig"
+        _protect_sig = (ticker, round(float(prob_K), 2), int(prob_days))
+        if _protect_live and st.session_state.get(_protect_sig_key) != _protect_sig:
+            st.session_state[f"{key_prefix}_prob_protect_K"] = float(round(_protect_live[0], 2))
+            st.session_state[f"{key_prefix}_prob_protect_premium"] = float(round(_protect_live[1], 2))
+            st.session_state[_protect_sig_key] = _protect_sig
+        spread_cols = st.columns(2)
+        with spread_cols[0]:
+            prob_protect_K = st.number_input(
+                "סטרייק הגנה ל-Bull Put Spread", min_value=0.01,
+                value=float(round(_protect_live[0], 2)) if _protect_live else float(round(prob_K * 0.95, 2)),
+                key=f"{key_prefix}_prob_protect_K",
+                help="הסטרייק שבו קונים פוט הגנה, מתחת לסטרייק הכתיבה - קובע את רוחב המרווח. נמשך אוטומטית משוק אמיתי כשזמין, אחרת דלתא ~0.15.",
+            )
+        with spread_cols[1]:
+            prob_protect_premium = st.number_input(
+                "פרמיית ההגנה ($)", min_value=0.01,
+                value=float(round(_protect_live[1], 2)) if _protect_live else float(round(prob_premium * 0.4, 2)),
+                key=f"{key_prefix}_prob_protect_premium",
+                help="הפרמיה ששולמת עבור פוט ההגנה. נמשך אוטומטית (Ask אמיתי) כשזמין.",
+            )
+        if _protect_live:
+            st.caption(
+                f"נמשך אוטומטית משוק אמיתי (דלתא יעד ~0.15): "
+                f"סטרייק ${_protect_live[0]:,.2f}, Ask ${_protect_live[1]:,.2f}"
+            )
+        else:
+            st.caption(
+                "לא נמצא ציטוט הגנה חי - הוזנו ערכי ברירת מחדל משוערים בלבד. "
+                "לפני החלטה אמיתית, כדאי לבדוק בשרשרת האופציות אצל הברוקר."
+            )
+
         _prob_flag = f"{key_prefix}_prob_show"
         st.markdown(
             '<span class="rs-btn-help" title="מריץ בבת אחת: הסתברות לפי שלושה מודלים נפרדים, תזוזה צפויה, סטרס טסט ו-CVaR. חלק מהתוצאות דורשות היסטוריית מחירים (yfinance).">❓</span>',
@@ -708,6 +809,90 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 'בסוגריים: % מההון הזמין, אם הוזן.</div>'
             )
             _card("סטרס טסט", f'<div class="rs-grid">{"".join(grid_stress)}</div>{stress_explain}')
+
+            # --- גודל פוזיציה מומלץ - חוק הסיכון (1%-3% מהתיק) --------------
+            if capital_arg:
+                _size_template = Position(legs=[Leg("put", -1, 1, prob_premium, prob_K, label="שורט פוט")])
+                prob_max_risk_pct = st.number_input(
+                    "מגבלת סיכון לעסקה (% מהתיק)", min_value=0.5, max_value=10.0, value=1.0, step=0.5,
+                    key=f"{key_prefix}_prob_max_risk_pct",
+                    help="ההפסד המרבי המותר בעסקה בודדת, כאחוז מהתיק. מקובל למסחר ספקולטיבי: 1%-3%.",
+                )
+                verdict = size_position(
+                    template=_size_template, portfolio_usd=capital_arg,
+                    max_risk_pct=prob_max_risk_pct / 100.0, template_contracts=1,
+                )
+                grid_size = "".join([
+                    _metric("חוזים מאושרים", str(verdict.contracts)),
+                    _metric("סיכון לחוזה", f"${verdict.unit_risk_usd:,.2f}"),
+                    _metric("סיכון כולל מאושר", f"${verdict.risk_usd:,.2f} ({verdict.risk_pct:.2%})"),
+                ])
+                size_extra = f'<div class="rs-explain">{verdict.reason}</div>'
+                if verdict.risk_pct > 0.05:
+                    size_extra += (
+                        '<span class="rs-badge red" style="margin-top:8px; display:inline-block;">'
+                        '⚠️ ריכוז יתר - הפוזיציה מסכנת מעל 5% מהתיק. שקלי להקטין חוזים או לבחור סטרייק רחוק יותר'
+                        '</span>'
+                    )
+                _card("גודל פוזיציה מומלץ (חוק הסיכון)", f'<div class="rs-grid">{grid_size}</div>{size_extra}')
+            else:
+                st.caption(
+                    "💡 הזיני \"הון זמין\" למעלה (בשורת הפרמיה/חוזים) כדי לראות כמה חוזים "
+                    "מותרים לפי חוק הסיכון (1%-3% מהתיק), וקבלת התראה על ריכוז יתר."
+                )
+
+            # --- השוואת הון/ביטחונות ו-ROC: CSP מול Bull Put Spread -----------
+            _csp1_collateral = prob_K * CONTRACT_MULTIPLIER * 1
+            _csp1_credit = prob_premium * CONTRACT_MULTIPLIER * 1
+            _csp1_max_loss = Position(legs=[Leg("put", -1, 1, prob_premium, prob_K)]).max_loss()
+            _csp1_roc = (_csp1_credit / _csp1_collateral) if _csp1_collateral else None
+
+            _csp3_collateral = _csp1_collateral * 3
+            _csp3_credit = _csp1_credit * 3
+            _csp3_max_loss = _csp1_max_loss * 3
+            _csp3_roc = _csp1_roc
+
+            _bps = bull_put_spread(
+                1, short_put=prob_K, short_put_prem=prob_premium,
+                long_put=prob_protect_K, long_put_prem=prob_protect_premium,
+            )
+            _bps_credit = _bps.net_cash
+            _bps_max_loss = _bps.max_loss()
+            _bps_collateral = _bps_max_loss  # Reg-T: ביטחונות = הפסד מרבי בסיכון מוגדר
+            _bps_roc = (_bps_credit / _bps_collateral) if _bps_collateral else None
+
+            def _roc_str(r):
+                return f"{r:.1%}" if r is not None else "—"
+
+            _cmp_headers = ["", "CSP (חוזה 1)", "CSP (3 חוזים)", "Bull Put Spread (חוזה 1)"]
+            _cmp_rows = [
+                ("ביטחונות נדרשים", f"${_csp1_collateral:,.0f}", f"${_csp3_collateral:,.0f}", f"${_bps_collateral:,.0f}"),
+                ("קרדיט נטו", f"${_csp1_credit:,.0f}", f"${_csp3_credit:,.0f}", f"${_bps_credit:,.0f}"),
+                ("הפסד מרבי", f"${_csp1_max_loss:,.0f}", f"${_csp3_max_loss:,.0f}", f"${_bps_max_loss:,.0f}"),
+                ("ROC (קרדיט/ביטחונות)", _roc_str(_csp1_roc), _roc_str(_csp3_roc), _roc_str(_bps_roc)),
+            ]
+            _cmp_thead = "".join(f"<th>{h}</th>" for h in _cmp_headers)
+            _cmp_trs = "".join(
+                "<tr>" + f"<td>{row[0]}</td>" + "".join(f"<td>{v}</td>" for v in row[1:]) + "</tr>"
+                for row in _cmp_rows
+            )
+            _cmp_table_html = (
+                f'<div style="overflow-x:auto;"><table class="rs-table">'
+                f'<thead><tr>{_cmp_thead}</tr></thead><tbody>{_cmp_trs}</tbody></table></div>'
+            )
+            _cmp_explain = (
+                '<div class="rs-explain">'
+                'ביטחונות ב-CSP הם הסטרייק המלא × 100 (הסכום שנועל הברוקר בחשבון קאש), '
+                'לא ההפסד המרבי התיאורטי - שני מספרים שונים בכוונה. ב-Bull Put Spread, '
+                'הביטחונות (לפי כלל Reg-T הרגיל) שווים בדיוק להפסד המרבי, כי ההגנה כבר '
+                'מגבילה את הסיכון. ROC כאן הוא קרדיט חלקי ביטחונות, לא קרדיט חלקי הפסד מרבי - '
+                'ל-CSP השניים שונים.'
+                '</div>'
+            )
+            _card(
+                "השוואת הון וביטחונות - CSP מול Bull Put Spread",
+                f"{_cmp_table_html}{_cmp_explain}",
+            )
 
             # --- מודלים 2+3 דורשים היסטוריית מחירים -----------------------
             closes = _try_fetch_closes(ticker, period="10y")
@@ -1082,6 +1267,17 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             if scr_df.empty:
                 st.info("לא הוזנו טיקרים תקינים.")
             else:
+                _scr_all_iv_missing = "iv" in scr_df.columns and scr_df["iv"].isna().all()
+                if _scr_all_iv_missing:
+                    st.warning(
+                        "⚠️ לא נמצא IV חי (מחיר אופציות מהשוק) לאף אחד מהטיקרים שנסרקו - "
+                        "לכן שדות כמו סטרייק, פרמיה והסתברויות OTM לא חושבו, וטיקרים אלה "
+                        "מוסתרים כברירת מחדל. יתכן שהשוק האמריקאי סגור כרגע - שעות המסחר "
+                        "הן כ-15:30–22:00 שעון ישראל (עשוי לזוז שעה לפי שעון קיץ/חורף בארה\"ב). "
+                        "אפשר גם להוריד את הסימון מ-\"הסתר טיקרים שנכשלו\" למטה כדי לראות "
+                        "את השורות הגולמיות."
+                    )
+
                 filt_cols = st.columns(2)
                 with filt_cols[0]:
                     hide_failed = st.checkbox(
