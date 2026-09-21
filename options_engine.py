@@ -799,6 +799,28 @@ def solve_zero_cost_collar(
     return collar(shares, stock_entry, put_k, put_prem, best_k, best_prem)
 
 
+def bull_put_spread(contracts: int,
+                    short_put: float, short_put_prem: float,
+                    long_put: float, long_put_prem: float) -> Position:
+    """
+    מרווח פוטים בקרדיט: כותבים פוט בסטרייק הגבוה יותר (short_put),
+    קונים הגנה בסטרייק נמוך יותר (long_put). סיכון מוגדר מראש:
+    רוחב המרווח (short_put - long_put) פחות הקרדיט שהתקבל, כפול 100,
+    כפול חוזים - לא יותר מזה ולא פחות, עקב העובדה בסיכון מוגדר.
+    """
+    if not (long_put < short_put):
+        raise ValueError(
+            f"long_put must be below short_put, got long_put={long_put}, short_put={short_put}"
+        )
+    return Position(
+        name="Bull Put Spread",
+        legs=[
+            Leg("put", -1, contracts, short_put_prem, short_put, label="כתיבה"),
+            Leg("put", +1, contracts, long_put_prem, long_put, label="הגנה"),
+        ],
+    )
+
+
 def iron_condor(contracts: int,
                 short_put: float, short_put_prem: float,
                 long_put: float, long_put_prem: float,
