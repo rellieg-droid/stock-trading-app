@@ -17,3 +17,9 @@ paper_portfolio.json
 _snapshots/
 portfolio.json
 user_data.json
+
+iv_history.db
+riskshield_watchlist.json
+*.bak
+img.png
+*.zip
