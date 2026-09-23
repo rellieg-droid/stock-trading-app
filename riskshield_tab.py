@@ -166,6 +166,7 @@ def _card(title: str, inner_html: str) -> None:
     )
 
 
+@st.cache_data(ttl=300, show_spinner=False)  # RS_CACHE_V1
 def _try_fetch_spot(ticker: str) -> Optional[float]:
     """שולף מחיר אחרון דרך yfinance. נכשל בשקט - בלי badge, בלי crash."""
     if not ticker:
@@ -180,6 +181,7 @@ def _try_fetch_spot(ticker: str) -> Optional[float]:
         return None
 
 
+@st.cache_data(ttl=900, show_spinner=False)  # RS_CACHE_V1
 def _try_fetch_atm_iv(ticker: str) -> Optional[float]:
     """
     IV אמיתי מהשוק (ATM, תפוגה 20-60 יום) - אותה fetch_atm_iv() מ-strategy_data.py
@@ -198,6 +200,7 @@ def _try_fetch_atm_iv(ticker: str) -> Optional[float]:
         return None
 
 
+@st.cache_data(ttl=3600, show_spinner=False)  # RS_CACHE_V1
 def _try_fetch_closes(ticker: str, period: str = "1y") -> Optional[list]:
     """שולף סדרת סגירות יומית להיסטוריה. נכשל בשקט."""
     if not ticker:
@@ -212,6 +215,7 @@ def _try_fetch_closes(ticker: str, period: str = "1y") -> Optional[list]:
         return None
 
 
+@st.cache_data(ttl=600, show_spinner=False)  # RS_CACHE_V1
 def _try_fetch_otm_put_quote(
     ticker: str, below_strike: float, dte_days: int = 30, target_delta: float = 0.15,
 ) -> Optional[tuple[float, float]]:
