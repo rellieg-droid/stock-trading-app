@@ -24,3 +24,6 @@ riskshield_watchlist.json
 img.png
 *.zip
 *.db
+combo_strategies.json
+combo_capital_ledger.json
+*.bak
