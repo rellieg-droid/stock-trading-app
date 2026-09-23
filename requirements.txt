@@ -1,8 +1,8 @@
-streamlit
+streamlit==1.55.0
 yfinance==1.2.0
 plotly
 pandas
 numpy
-streamlit-autorefresh
-streamlit-option-menu
-streamlit-searchbox
+streamlit-autorefresh==1.0.1
+streamlit-option-menu==0.4.0
+streamlit-searchbox==0.1.24
