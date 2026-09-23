@@ -2685,6 +2685,23 @@ _active_map = {"🏠 Home": "tabbody_home", "📈 גרף": "tabbody_chart", "�
                "🧭 אסטרטגיה": "tabbody_strategy", "🛡️ RiskShield": "tabbody_riskshield",
                "🧩 אסטרטגיות משולבות": "tabbody_combo"}
 _active_key = _active_map.get(active_sub)
+
+# LAZY_TABS_V1 — רק הטאב הפעיל רץ. ראי patch_lazy_tabs.py לפרטים.
+_ALWAYS_RUN_TABS = {"tabbody_alerts"}                     # בדיקת התראות כל דקה
+_ALSO_RUN_FOR = {"tabbody_chart": {"tabbody_analysis"}}   # הניתוח משתמש בפונקציות מטאב הגרף
+
+
+def _tab_body(key):
+    run = (
+        _active_key is None
+        or key == _active_key
+        or key in _ALWAYS_RUN_TABS
+        or _active_key in _ALSO_RUN_FOR.get(key, ())
+    )
+    if run:
+        with st.container(key=key):
+            yield key
+
 st.markdown(
     # TAB_GAP_FIX_V2 — לא מספיק להסתיר את הקונטיינר. st.container שם את
     # st-key-X על div פנימי, וההורה נשאר בזרימת ה-flex ותורם 14px של gap
@@ -2701,7 +2718,7 @@ st.markdown(
 # ════════════════════════════════════════
 # TAB 1 — CHART
 # ════════════════════════════════════════
-with st.container(key="tabbody_home"):
+for _ in _tab_body("tabbody_home"):
     from datetime import datetime as _dt
 
     if "home_main_cat" not in st.session_state:
@@ -3038,7 +3055,7 @@ with st.container(key="tabbody_home"):
 
 
 
-with st.container(key="tabbody_chart"):
+for _ in _tab_body("tabbody_chart"):
 
     # ═══════════════════════════════════════════════════════
     # TERMINAL TOOLBAR — single compact bar
@@ -5125,7 +5142,7 @@ with st.container(key="tabbody_chart"):
 # ════════════════════════════════════════
 # TAB 2 — DECISION MODULE
 # ════════════════════════════════════════
-with st.container(key="tabbody_analysis"):
+for _ in _tab_body("tabbody_analysis"):
     an_sub1, an_sub2, an_sub3, an_sub4 = st.tabs(["🎯 סיכום והחלטה", "🤖 AI ניתוח מתקדם", "📊 סטאפ המשך מגמה", "⚠️ Position Sizing"])
 
     with an_sub1:
@@ -5928,7 +5945,7 @@ document.getElementById("ql-high") && (document.getElementById("ql-high").style.
 # ════════════════════════════════════════
 # TAB 3 — Backtest (Professional)
 # ════════════════════════════════════════
-with st.container(key="tabbody_backtest"):
+for _ in _tab_body("tabbody_backtest"):
     st.markdown(f"### ⏳ Backtest — {ticker}")
     st.markdown(
         '<div style="color:#8b949e;font-size:.78rem;margin-bottom:12px;">'
@@ -6247,7 +6264,7 @@ with st.container(key="tabbody_backtest"):
 # ════════════════════════════════════════
 # TAB 4 — מסחר
 # ════════════════════════════════════════
-with st.container(key="tabbody_trade"):
+for _ in _tab_body("tabbody_trade"):
     tr_sub1, tr_sub2 = st.tabs(["🛒 מסחר", "📊 ביצועים"])
 
     with tr_sub1:
@@ -6536,7 +6553,7 @@ with st.container(key="tabbody_trade"):
         # ════════════════════════════════════════
         # TAB 7 — מדריך למשתמש
         # ════════════════════════════════════════
-with st.container(key="tabbody_guide"):
+for _ in _tab_body("tabbody_guide"):
     st.markdown("""
 <div style="direction:rtl;max-width:900px;margin:0 auto;">
 
@@ -6734,7 +6751,7 @@ with st.container(key="tabbody_guide"):
 # ════════════════════════════════════════
 # TAB 8 — AI ניתוח
 # ════════════════════════════════════════
-with st.container(key="tabbody_compare"):
+for _ in _tab_body("tabbody_compare"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">⚖️ השוואת מניות</div>'
@@ -7055,7 +7072,7 @@ with st.container(key="tabbody_compare"):
 # ════════════════════════════════════════
 # TAB 10 — 💼 Portfolio Tracker
 # ════════════════════════════════════════
-with st.container(key="tabbody_portfolio"):
+for _ in _tab_body("tabbody_portfolio"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">💼 Portfolio Tracker — תיק עסקאות</div>'
@@ -7215,7 +7232,7 @@ with st.container(key="tabbody_portfolio"):
 # ════════════════════════════════════════
 # TAB 11 — 🔔 Price Alerts
 # ════════════════════════════════════════
-with st.container(key="tabbody_alerts"):
+for _ in _tab_body("tabbody_alerts"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">🔔 Price Alerts — התראות מחיר</div>'
@@ -7312,7 +7329,7 @@ with st.container(key="tabbody_alerts"):
 # ════════════════════════════════════════
 # TAB 12 — 📅 Earnings Calendar
 # ════════════════════════════════════════
-with st.container(key="tabbody_reports"):
+for _ in _tab_body("tabbody_reports"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">📅 Earnings Calendar — לוח דוחות</div>'
@@ -7423,7 +7440,7 @@ with st.container(key="tabbody_reports"):
 # ════════════════════════════════════════
 # TAB 13 — 👁️ Watchlist
 # ════════════════════════════════════════
-with st.container(key="tabbody_watchlist"):
+for _ in _tab_body("tabbody_watchlist"):
     st.markdown(
         '<div style="direction:rtl;margin-bottom:12px;">'
         '<div style="font-size:1rem;font-weight:800;color:#e6edf3;margin-bottom:4px;">👁️ Watchlist — רשימת מעקב</div>'
@@ -7599,14 +7616,14 @@ with st.container(key="tabbody_watchlist"):
 # ════════════════════════════════════════
 # TAB 14 — 🧭 אסטרטגיה (הציון המשולב)
 # ════════════════════════════════════════
-with st.container(key="tabbody_strategy"):
+for _ in _tab_body("tabbody_strategy"):
     render_strategy_tab(default_ticker=st.session_state.get("ticker", "NVDA"))
 
-with st.container(key="tabbody_riskshield"):
+for _ in _tab_body("tabbody_riskshield"):
     render_riskshield_tab(default_ticker=st.session_state.get("ticker", "NVDA"))
 
 # ════════════════════════════════════════
 # TAB 15 — 🧩 אסטרטגיות משולבות
 # ════════════════════════════════════════
-with st.container(key="tabbody_combo"):
+for _ in _tab_body("tabbody_combo"):
     render_combo_strategy_tab()
