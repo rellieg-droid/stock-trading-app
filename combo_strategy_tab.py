@@ -27,6 +27,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 import combo_strategy_engine as engine
+from symbol_search import symbol_picker  # SYMBOL_PICKER_V1
 
 WATCHLIST_PATH = "combo_strategies.json"
 LEDGER_PATH = "combo_capital_ledger.json"
@@ -100,7 +101,7 @@ def _render_guide():
 def _render_scanner():
     col1, col2 = st.columns([2, 1])
     with col1:
-        ticker = st.text_input("טיקר", value="SOXL", key="combo_scan_ticker").upper().strip()
+        ticker = symbol_picker("טיקר", key="combo_scan_ticker_sb", default="SOXL")  # SYMBOL_PICKER_V1
     with col2:
         num_puts = st.number_input(
             "מספר פוטים למכירה", min_value=1, max_value=10, value=2, key="combo_num_puts"
