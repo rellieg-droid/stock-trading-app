@@ -4,3 +4,5 @@ plotly
 pandas
 numpy
 streamlit-autorefresh
+streamlit-option-menu
+streamlit-searchbox
