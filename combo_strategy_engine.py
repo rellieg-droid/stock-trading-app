@@ -51,13 +51,47 @@ def get_current_price(ticker: str) -> float:
     return float(hist["Close"].iloc[-1])
 
 
-def get_ticker_name(ticker: str) -> Optional[str]:
-    """Best-effort company/fund name for a ticker, so the UI can confirm the symbol is right."""
+_TICKER_NAME_CACHE: dict[str, str] = {}  # TICKER_NAME_FALLBACK_V1 - רק הצלחות נשמרות
+
+
+def _ticker_name_via_search(ticker: str) -> Optional[str]:
+    """גיבוי: API החיפוש של Yahoo, לא דורש crumb. מחזיר שם רק להתאמה מדויקת של הסימבול."""
     try:
-        info = yf.Ticker(ticker).info
-        return info.get("shortName") or info.get("longName")
+        import requests
+        r = requests.get(
+            "https://query2.finance.yahoo.com/v1/finance/search",
+            params={"q": ticker, "quotesCount": 6, "newsCount": 0, "listsCount": 0},
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=6,
+        )
+        if r.status_code != 200:
+            return None
+        for q in r.json().get("quotes", []):
+            if str(q.get("symbol", "")).upper() == ticker.upper():
+                return q.get("shortname") or q.get("longname")
     except Exception:
         return None
+    return None
+
+
+def get_ticker_name(ticker: str) -> Optional[str]:
+    """Best-effort company/fund name for a ticker, so the UI can confirm the symbol is right."""
+    key = (ticker or "").upper().strip()
+    if not key:
+        return None
+    if key in _TICKER_NAME_CACHE:
+        return _TICKER_NAME_CACHE[key]
+    name = None
+    try:
+        info = yf.Ticker(key).info
+        name = info.get("shortName") or info.get("longName")
+    except Exception:
+        name = None
+    if not name:
+        name = _ticker_name_via_search(key)
+    if name:
+        _TICKER_NAME_CACHE[key] = name
+    return name
 
 
 def list_available_expirations(ticker: str) -> list[str]:
