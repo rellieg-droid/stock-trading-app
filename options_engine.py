@@ -1171,3 +1171,91 @@ def nearest_strike(strikes: Sequence[float], K: float) -> float | None:
     if not valid:
         return None
     return min(valid, key=lambda s: (abs(s - K), s))
+
+
+# =============================================================================
+# 9. שורות שרשרת לטבלת ההשוואה - שכבת ריכוז, לא נוסחה חדשה
+# =============================================================================
+#
+# לכל סטרייק: IV מחושב מה-Mid שלו עצמו (לא IV אחיד לכל השרשרת), ומה-IV הזה
+# דלתא, הסתברות OTM ותזוזה צפויה. כך כל שורה עקבית עם הפרמיה שלה - ה-skew
+# נכנס לחישוב במקום להיעלם. סטרייק בלי ציטוט חי, או בלי IV (Mid מתחת לערך
+# הפנימי), מדולג - לא מנוחש.
+
+@dataclass(frozen=True)
+class ChainStrikeRow:
+    strike: float
+    premium: float                  # Mid, מעוגל לסנט
+    spread_pct: float               # (ask - bid) / mid
+    iv: float                       # מה-Mid, שבר (0.35 = 35%)
+    delta: float                    # ערך מוחלט
+    prob_otm_model: float
+    prob_otm_fat_tail: float | None
+    breakeven: float
+    xem_distance: float | None
+    volume: int
+    open_interest: int
+
+
+def _as_count(v) -> int:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 0
+    return int(f) if isfinite(f) and f > 0 else 0
+
+
+def chain_strike_rows(
+    chain: Sequence[dict],
+    S: float,
+    dte_days: int,
+    r: float = 0.045,
+    delta_band: tuple[float, float] = (0.10, 0.35),
+    daily_log_returns: Sequence[float] | None = None,
+    max_rows: int = 10,
+) -> list[ChainStrikeRow]:
+    """
+    chain: רשימת dict עם strike, bid, ask, volume, openInterest (כמו yfinance puts).
+    יותר מ-max_rows בטווח -> הקרובים לאמצע טווח הדלתא. התוצאה ממוינת לפי סטרייק.
+    """
+    if S <= 0 or dte_days < 1:
+        return []
+    lo, hi = delta_band
+    band_mid = (lo + hi) / 2.0
+    T = dte_days / 365.0
+    rows: list[ChainStrikeRow] = []
+    for row in chain or ():
+        try:
+            K = float(row.get("strike"))
+        except (TypeError, ValueError):
+            continue
+        if not (isfinite(K) and K > 0):
+            continue
+        q = quote_summary(row.get("bid"), row.get("ask"))
+        if not q.is_live:
+            continue
+        premium = round(max(q.mid, 0.01), 2)
+        try:
+            iv = implied_vol("put", premium, S, K, T, r)
+        except ValueError:
+            continue
+        if not (0.0 < iv < 6.0):
+            continue
+        g = bs_greeks("put", S, K, T, iv, r)
+        delta = abs(g.delta)
+        if not (lo <= delta <= hi):
+            continue
+        em = expected_move(S=S, sigma=iv, T_days=dte_days)
+        fat = None
+        if daily_log_returns:
+            fat = fat_tail_otm_probability(daily_log_returns, S=S, K=K, dte_days=dte_days).otm_probability
+        rows.append(ChainStrikeRow(
+            strike=K, premium=premium, spread_pct=q.spread_pct, iv=iv, delta=delta,
+            prob_otm_model=g.prob_otm, prob_otm_fat_tail=fat,
+            breakeven=short_put_breakeven(strike=K, premium=premium),
+            xem_distance=strike_distance_in_expected_moves(S=S, K=K, move=em.move),
+            volume=_as_count(row.get("volume")), open_interest=_as_count(row.get("openInterest")),
+        ))
+    if len(rows) > max_rows:
+        rows = sorted(rows, key=lambda x: abs(x.delta - band_mid))[:max_rows]
+    return sorted(rows, key=lambda x: x.strike)

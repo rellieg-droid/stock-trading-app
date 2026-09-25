@@ -37,7 +37,7 @@ from options_engine import (
     short_put_breakeven,
     size_position, Position, Leg,
     bull_put_spread, CONTRACT_MULTIPLIER,
-    quote_summary, nearest_strike,
+    quote_summary, nearest_strike, chain_strike_rows,
 )
 
 from put_tracker_tab import render_put_tracker_tab
@@ -964,7 +964,61 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
 
             _fat_for_row = None
             _rv_rank_for_row = None
-            add_col, export_col = st.columns([1, 1])
+            add_col, chain_col, export_col = st.columns([1, 1, 1])
+            with chain_col:
+                if st.button(
+                    "📥 מלא מהשרשרת", key=f"{key_prefix}_compare_chain",
+                    help="טוען לטבלה את כל הסטרייקים בטווח דלתא 0.10-0.35 (עד 10) לתאריך הפקיעה "
+                         "שנבחר. לכל סטרייק IV מה-Mid שלו עצמו. דורש ציטוט חי (שעות מסחר בארה\"ב).",
+                ):
+                    _c_chain = _try_fetch_put_chain(ticker, prob_exp.isoformat())
+                    _c_closes = _try_fetch_closes(ticker, period="10y")
+                    _c_rets = (
+                        [_log(b / a) for a, b in zip(_c_closes, _c_closes[1:]) if a > 0]
+                        if _c_closes else None
+                    )
+                    _c_rank = rv_rank(_c_closes) if _c_closes else None
+                    _c_rows = chain_strike_rows(
+                        _c_chain, S=float(prob_S), dte_days=int(prob_days),
+                        r=prob_r_pct / 100.0, daily_log_returns=_c_rets,
+                    )
+                    if not _c_chain:
+                        st.session_state[f"{key_prefix}_compare_chain_msg"] = "אין שרשרת אופציות לטיקר/תאריך הזה."
+                    elif not _c_rows:
+                        st.session_state[f"{key_prefix}_compare_chain_msg"] = (
+                            "אין סטרייקים עם ציטוט חי בטווח דלתא 0.10-0.35 "
+                            "(מחוץ לשעות המסחר ה-Bid הוא 0)."
+                        )
+                    else:
+                        for _cr in _c_rows:
+                            _c_row = {
+                                "טיקר": ticker, "סטרייק": _cr.strike, "פקיעה": prob_exp.strftime("%d/%m/%Y"),
+                                "פרמיה": _cr.premium, "IV (%)": round(_cr.iv * 100, 1),
+                                "נפח": _cr.volume, "עניין פתוח": _cr.open_interest,
+                                "Breakeven": round(_cr.breakeven, 2),
+                                "הסתברות מודל (%)": round(_cr.prob_otm_model * 100, 1),
+                                "Fat-tail (%)": round(_cr.prob_otm_fat_tail * 100, 1) if _cr.prob_otm_fat_tail is not None else None,
+                                "RV Rank": round(_c_rank, 0) if _c_rank is not None else None,
+                                "מרחק (xEM)": round(_cr.xem_distance, 2) if _cr.xem_distance is not None else None,
+                                "נזילות": "⚠️ נמוכה" if (0 < _cr.volume < 50 or 0 < _cr.open_interest < 50) else "תקינה",
+                                "דלתא": round(_cr.delta, 3),
+                                "מרווח (%)": round(_cr.spread_pct * 100, 1),
+                            }
+                            _c_existing = next(
+                                (r for r in st.session_state[_compare_key]
+                                 if r["טיקר"] == ticker and r["סטרייק"] == _cr.strike),
+                                None,
+                            )
+                            if _c_existing is not None:
+                                _c_existing.update(_c_row)
+                            else:
+                                st.session_state[_compare_key].append(_c_row)
+                        st.session_state[f"{key_prefix}_compare_chain_msg"] = (
+                            f"נטענו {len(_c_rows)} סטרייקים מהשרשרת ({prob_exp.strftime('%d/%m/%Y')})."
+                        )
+                _c_msg = st.session_state.pop(f"{key_prefix}_compare_chain_msg", None)
+                if _c_msg:
+                    st.caption(_c_msg)
             with add_col:
                 if st.button("➕ הוסף שורה", key=f"{key_prefix}_compare_add"):
                     st.session_state[f"{key_prefix}_compare_pending"] = True
@@ -1222,6 +1276,13 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     _card("CVaR (Expected Shortfall)", f'<div class="rs-grid">{"".join(grid_cvar)}</div>{cvar_explain}')
 
             if st.session_state.get(f"{key_prefix}_compare_pending"):
+                try:
+                    _manual_delta = round(abs(bs_greeks(
+                        kind="put", S=prob_S, K=prob_K, T=prob_days / 365.0,
+                        sigma=prob_sigma_pct / 100.0, r=prob_r_pct / 100.0,
+                    ).delta), 3)
+                except ValueError:
+                    _manual_delta = None
                 new_row = {
                     "טיקר": ticker, "סטרייק": prob_K, "פרמיה": prob_premium, "IV (%)": prob_sigma_pct,
                     "נפח": prob_volume, "עניין פתוח": prob_oi,
@@ -1231,6 +1292,12 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     "RV Rank": round(_rv_rank_for_row, 0) if _rv_rank_for_row is not None else None,
                     "מרחק (xEM)": round(em_distance, 2) if em_distance is not None else None,
                     "נזילות": "⚠️ נמוכה" if (0 < prob_volume < 50 or 0 < prob_oi < 50) else "תקינה",
+                    "פקיעה": prob_exp.strftime("%d/%m/%Y"),
+                    "דלתא": _manual_delta,
+                    "מרווח (%)": (
+                        round(_q.spread_pct * 100, 1)
+                        if (_q is not None and _q.is_live and _chain_K == prob_K) else None
+                    ),
                 }
                 existing = next(
                     (r for r in st.session_state[_compare_key]
@@ -1264,7 +1331,10 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
 
                 _metric_rows = [
                     ("פרמיה", lambda r: f"${r['פרמיה']:.2f}"),
+                    ("פקיעה", lambda r: r.get("פקיעה") or "—"),
                     ("IV (%)", lambda r: f"{r['IV (%)']:.1f}%"),
+                    ("דלתא", lambda r: f"{r['דלתא']:.2f}" if r.get("דלתא") is not None else "—"),
+                    ("מרווח Bid/Ask", lambda r: f"{r['מרווח (%)']:.1f}%" if r.get("מרווח (%)") is not None else "—"),
                     ("הסתברות מודל OTM", lambda r: (
                         f"{r['הסתברות מודל (%)']:.1f}%" if r["הסתברות מודל (%)"] is not None else "—"
                     )),
@@ -1291,8 +1361,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     _tds = "".join(f"<td>{_fmt(r)}</td>" for r in _rows_for_ticker)
                     _trs += f"<tr><td>{_label}</td>{_tds}</tr>"
                 st.markdown(
-                    f'<table class="rs-table"><thead><tr>{_thead}</tr></thead>'
-                    f'<tbody>{_trs}</tbody></table>',
+                    f'<div style="overflow-x:auto;"><table class="rs-table"><thead><tr>{_thead}</tr></thead>'
+                    f'<tbody>{_trs}</tbody></table></div>',
                     unsafe_allow_html=True,
                 )
 
