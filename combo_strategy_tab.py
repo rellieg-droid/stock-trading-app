@@ -177,7 +177,7 @@ def _render_auto_scan(ticker: str, expiration: str, num_puts: int, available_cap
             "טווח סטייה מותר (±)", 0.05, 0.5, 0.20, 0.05, key="combo_ratio_tolerance"
         )
 
-    if st.button("🔍 סרוק", key="combo_scan_button", use_container_width=True):
+    if st.button("🔍 סרוק", key="combo_scan_button", width="stretch"):
         with st.spinner("סורק שרשרת אופציות..."):
             try:
                 spot = engine.get_current_price(ticker)
@@ -211,7 +211,7 @@ def _render_auto_scan(ticker: str, expiration: str, num_puts: int, available_cap
 
 
 def _render_manual_pick(ticker: str, expiration: str, num_puts: int, available_capital: float):
-    if st.button("📥 טען שרשרת אופציות", key="combo_manual_load", use_container_width=True):
+    if st.button("📥 טען שרשרת אופציות", key="combo_manual_load", width="stretch"):
         with st.spinner("טוען..."):
             try:
                 spot = engine.get_current_price(ticker)
@@ -250,7 +250,7 @@ def _render_manual_pick(ticker: str, expiration: str, num_puts: int, available_c
             key="combo_manual_put",
         )
 
-    if st.button("➕ חשבי", key="combo_manual_compute", use_container_width=True):
+    if st.button("➕ חשבי", key="combo_manual_compute", width="stretch"):
         try:
             candidate = engine.build_manual_candidate(
                 ticker, expiration, spot, calls, puts,
@@ -381,7 +381,7 @@ def _render_candidate_card(cand, idx, available_capital: float = 0.0):
             font=dict(color="#FFFFFF"),
             height=320, margin=dict(l=10, r=10, t=40, b=10), showlegend=False,
         )
-        st.plotly_chart(fig, use_container_width=True, key=f"combo_chart_{idx}")
+        st.plotly_chart(fig, width="stretch", key=f"combo_chart_{idx}")
         st.markdown(
             "<div style='font-size:0.85rem;color:#D0D0D0;'>"
             "ציר X: מחיר המניה ביום הפקיעה. ציר Y: הרווח/הפסד בדולרים על הפוזיציה הזו באותו מחיר. "

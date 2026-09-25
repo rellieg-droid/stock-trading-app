@@ -321,7 +321,7 @@ def _render_gap_chart(plan: rr.TradePlan, outcomes: list) -> None:
                    font=dict(size=13)),
         yaxis=dict(gridcolor="rgba(139,147,161,.15)", tickformat=",.0f"),
     )
-    st.plotly_chart(fig, use_container_width=True,
+    st.plotly_chart(fig, width="stretch",
                     key=f"rr_gap_chart_{plan.ticker}")
 
 

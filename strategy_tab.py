@@ -270,7 +270,7 @@ def render_strategy_tab(default_ticker: str = "NVDA",
 
     if report is None:
         st.error(f"לא ניתן להפיק ניתוח עבור {result['ticker']}.")
-        st.dataframe(diag.to_table(), hide_index=True, use_container_width=True)
+        st.dataframe(diag.to_table(), hide_index=True, width="stretch")
         return
 
     st.markdown(_verdict_card(report), unsafe_allow_html=True)
@@ -284,7 +284,7 @@ def render_strategy_tab(default_ticker: str = "NVDA",
                     unsafe_allow_html=True)
 
     with st.expander("מקורות נתונים ואזהרות", expanded=False):
-        st.dataframe(diag.to_table(), hide_index=True, use_container_width=True)
+        st.dataframe(diag.to_table(), hide_index=True, width="stretch")
         for n in report.notes:
             st.caption(f"• {n}")
         st.caption(f"מנוע {se.__version__} · מתאם {sd.__version__}")
