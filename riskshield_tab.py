@@ -823,9 +823,15 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         # האחרונה - כדי לא לדרוס עריכה ידנית שעוד רלוונטית.
         _protect_sig_key = f"{key_prefix}_prob_protect_sig"
         _protect_sig = (ticker, round(float(prob_K), 2), int(prob_days))
-        if _protect_live and st.session_state.get(_protect_sig_key) != _protect_sig:
-            st.session_state[f"{key_prefix}_prob_protect_K"] = float(round(_protect_live[0], 2))
-            st.session_state[f"{key_prefix}_prob_protect_premium"] = float(round(_protect_live[1], 2))
+        if st.session_state.get(_protect_sig_key) != _protect_sig:
+            if _protect_live:
+                st.session_state[f"{key_prefix}_prob_protect_K"] = float(round(_protect_live[0], 2))
+                st.session_state[f"{key_prefix}_prob_protect_premium"] = float(round(_protect_live[1], 2))
+            else:
+                # בלי ציטוט חי: איפוס לברירת מחדל יחסית לסטרייק הנוכחי - לא להשאיר
+                # ערך ישן (טיקר קודם / סטרייק קודם) שעלול להיות מעל סטרייק הכתיבה
+                st.session_state[f"{key_prefix}_prob_protect_K"] = float(round(prob_K * 0.95, 2))
+                st.session_state[f"{key_prefix}_prob_protect_premium"] = float(round(max(prob_premium * 0.4, 0.01), 2))
             st.session_state[_protect_sig_key] = _protect_sig
         spread_cols = st.columns(2)
         with spread_cols[0]:
@@ -988,23 +994,33 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             _csp3_max_loss = _csp1_max_loss * 3
             _csp3_roc = _csp1_roc
 
-            _bps = bull_put_spread(
-                1, short_put=prob_K, short_put_prem=prob_premium,
-                long_put=prob_protect_K, long_put_prem=prob_protect_premium,
-            )
-            _bps_credit = _bps.net_cash
-            _bps_max_loss = _bps.max_loss()
+            try:
+                _bps = bull_put_spread(
+                    1, short_put=prob_K, short_put_prem=prob_premium,
+                    long_put=prob_protect_K, long_put_prem=prob_protect_premium,
+                )
+            except ValueError:
+                _bps = None
+                st.warning(
+                    f"סטרייק ההגנה (${prob_protect_K:,.2f}) חייב להיות מתחת לסטרייק הכתיבה "
+                    f"(${prob_K:,.2f}) - עמודת Bull Put Spread לא חושבה."
+                )
+            _bps_credit = _bps.net_cash if _bps else None
+            _bps_max_loss = _bps.max_loss() if _bps else None
             _bps_collateral = _bps_max_loss  # Reg-T: ביטחונות = הפסד מרבי בסיכון מוגדר
             _bps_roc = (_bps_credit / _bps_collateral) if _bps_collateral else None
+
+            def _usd0(v):
+                return f"${v:,.0f}" if v is not None else "—"
 
             def _roc_str(r):
                 return f"{r:.1%}" if r is not None else "—"
 
             _cmp_headers = ["", "CSP (חוזה 1)", "CSP (3 חוזים)", "Bull Put Spread (חוזה 1)"]
             _cmp_rows = [
-                ("ביטחונות נדרשים", f"${_csp1_collateral:,.0f}", f"${_csp3_collateral:,.0f}", f"${_bps_collateral:,.0f}"),
-                ("קרדיט נטו", f"${_csp1_credit:,.0f}", f"${_csp3_credit:,.0f}", f"${_bps_credit:,.0f}"),
-                ("הפסד מרבי", f"${_csp1_max_loss:,.0f}", f"${_csp3_max_loss:,.0f}", f"${_bps_max_loss:,.0f}"),
+                ("ביטחונות נדרשים", f"${_csp1_collateral:,.0f}", f"${_csp3_collateral:,.0f}", _usd0(_bps_collateral)),
+                ("קרדיט נטו", f"${_csp1_credit:,.0f}", f"${_csp3_credit:,.0f}", _usd0(_bps_credit)),
+                ("הפסד מרבי", f"${_csp1_max_loss:,.0f}", f"${_csp3_max_loss:,.0f}", _usd0(_bps_max_loss)),
                 ("ROC (קרדיט/ביטחונות)", _roc_str(_csp1_roc), _roc_str(_csp3_roc), _roc_str(_bps_roc)),
             ]
             _cmp_thead = "".join(f"<th>{h}</th>" for h in _cmp_headers)
@@ -1064,6 +1080,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     ("CSP (3 חוזים)", _csp3_collateral),
                     ("Bull Put Spread (חוזה 1)", _bps_collateral),
                 ]:
+                    if _coll is None:
+                        continue
                     _pct_locked = _coll / prob_capital
                     _liq_cls = "green" if _pct_locked <= 0.5 else "yellow" if _pct_locked <= 0.75 else "red"
                     _threshold_badges.append(
