@@ -1121,3 +1121,50 @@ def build_screener_row(
         prob_otm_historical=prob_hist, xem_distance=xem, cvar_5pct=cvar,
         max_loss=max_loss, note=note,
     )
+
+
+# =============================================================================
+# 8. ציטוט שוק - bid/ask אמיתי לסטרייק בודד (השליפה עצמה ב-riskshield_tab.py)
+# =============================================================================
+#
+# ציטוט "חי" = bid > 0 וגם ask > 0 וגם ask >= bid. מחוץ לשעות המסחר ב-US
+# ה-bid לרוב 0 - במקרה הזה אין Mid, ואין fallback ל-lastPrice: אותו עיקרון
+# כמו ה-filter של bid > 0 ב-fetch_atm_iv.
+
+@dataclass(frozen=True)
+class QuoteSummary:
+    is_live: bool
+    mid: float | None
+    spread: float | None       # ask - bid, בדולרים למניה
+    spread_pct: float | None   # spread / mid (0.05 = 5%)
+
+
+def quote_summary(bid: float | None, ask: float | None) -> QuoteSummary:
+    """Mid ומרווח מ-bid/ask. לא חי -> כל השדות None מלבד is_live=False."""
+    try:
+        b, a = float(bid), float(ask)
+    except (TypeError, ValueError):
+        return QuoteSummary(False, None, None, None)
+    if not (isfinite(b) and isfinite(a)) or b <= 0 or a <= 0 or a < b:
+        return QuoteSummary(False, None, None, None)
+    mid = (a + b) / 2.0
+    spread = a - b
+    return QuoteSummary(True, mid, spread, spread / mid)
+
+
+def nearest_strike(strikes: Sequence[float], K: float) -> float | None:
+    """
+    הסטרייק בשרשרת הקרוב ביותר ל-K. בשוויון מרחק - הנמוך מביניהם
+    (לפוט שנמכר: רחוק יותר מהכסף, כלומר הכיוון השמרני). None אם אין סטרייקים תקינים.
+    """
+    valid = []
+    for s in strikes or ():
+        try:
+            f = float(s)
+        except (TypeError, ValueError):
+            continue
+        if isfinite(f) and f > 0:
+            valid.append(f)
+    if not valid:
+        return None
+    return min(valid, key=lambda s: (abs(s - K), s))

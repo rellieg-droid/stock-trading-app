@@ -37,6 +37,7 @@ from options_engine import (
     short_put_breakeven,
     size_position, Position, Leg,
     bull_put_spread, CONTRACT_MULTIPLIER,
+    quote_summary, nearest_strike,
 )
 
 from put_tracker_tab import render_put_tracker_tab
@@ -225,6 +226,26 @@ def _try_fetch_expirations(ticker: str) -> list:
         today = _date.today()
         return [e for e in (yf.Ticker(ticker).options or ())
                 if (_date.fromisoformat(e) - today).days >= 1]
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=300, show_spinner=False)  # RS_CACHE_V1
+def _try_fetch_put_chain(ticker: str, expiry: str) -> list:
+    """שרשרת PUT לפקיעה אחת (ISO) כרשימת dict. NaN -> None. ריקה אם אין."""
+    if not ticker or not expiry:
+        return []
+    try:
+        import yfinance as yf
+        import pandas as pd
+        puts = yf.Ticker(ticker).option_chain(expiry).puts
+        if puts is None or puts.empty:
+            return []
+        cols = ["strike", "bid", "ask", "lastPrice", "volume", "openInterest", "impliedVolatility"]
+        return [
+            {k: (None if pd.isna(v) else float(v)) for k, v in row.items()}
+            for row in puts.reindex(columns=cols).to_dict("records")
+        ]
     except Exception:
         return []
 
@@ -688,12 +709,25 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         )
 
         spot_default = _try_fetch_spot(ticker) or 100.0
+        # --- הצמדת סטרייק לשרשרת: הערך נקבע בריצה הקודמת (למטה), ומוחל כאן
+        # לפני יצירת ה-widget - Streamlit לא מרשה לשנות widget אחרי שנוצר.
+        # ברירות מחדל דרך session_state ולא value= - אחרת Streamlit מזהיר
+        # על widget שקיבל גם value= וגם ערך מ-Session State.
+        _k_key = f"{key_prefix}_prob_K_{ticker}"
+        _k_snap = st.session_state.pop(f"{key_prefix}_prob_K_snap", None)
+        if _k_snap is not None:
+            st.session_state[_k_key] = _k_snap
+        st.session_state.setdefault(_k_key, float(round(spot_default * 0.9, 2)))
+        st.session_state.setdefault(f"{key_prefix}_prob_premium", 2.0)
+        st.session_state.setdefault(f"{key_prefix}_prob_volume", 0)
+        st.session_state.setdefault(f"{key_prefix}_prob_oi", 0)
+
         cols = st.columns(4)
         with cols[0]:
             prob_S = st.number_input("מחיר נכס (S)", min_value=0.01, value=float(round(spot_default, 2)),
                                       key=f"{key_prefix}_prob_S_{ticker}", help=_HELP["S"])
         with cols[1]:
-            prob_K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default * 0.9, 2)),
+            prob_K = st.number_input("סטרייק (K)", min_value=0.01,
                                       key=f"{key_prefix}_prob_K_{ticker}", help=_HELP["K"])
         with cols[2]:
             prob_days, prob_exp = _expiry_input("תאריך פקיעה", f"{key_prefix}_prob_exp", ticker,
@@ -708,12 +742,65 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             if _prob_iv_live:
                 st.caption(f"נמשך אוטומטית משוק אמיתי: {_prob_iv_live:.1f}%")
 
+        # --- ציטוט שוק לסטרייק/פקיעה שנבחרו ------------------------------
+        _chain = _try_fetch_put_chain(ticker, prob_exp.isoformat())
+        _chain_K = nearest_strike([r["strike"] for r in _chain], float(prob_K)) if _chain else None
+        if _chain_K is not None and abs(_chain_K - float(prob_K)) > 1e-6:
+            st.session_state[f"{key_prefix}_prob_K_snap"] = _chain_K
+            st.rerun()
+
+        _qrow = next((r for r in _chain if r["strike"] == _chain_K), None) if _chain_K is not None else None
+        _q = quote_summary(_qrow["bid"], _qrow["ask"]) if _qrow else None
+
+        # מילוי בכוח רק כשהטיקר/הפקיעה/הסטרייק השתנו - כמו רגל ההגנה למטה
+        _q_sig_key = f"{key_prefix}_prob_quote_sig"
+        _q_sig = (ticker, prob_exp.isoformat(), _chain_K)
+        if _qrow and st.session_state.get(_q_sig_key) != _q_sig:
+            if _q.is_live:
+                st.session_state[f"{key_prefix}_prob_premium"] = float(round(max(_q.mid, 0.01), 2))
+            if _qrow["volume"] is not None:
+                st.session_state[f"{key_prefix}_prob_volume"] = int(_qrow["volume"])
+            if _qrow["openInterest"] is not None:
+                st.session_state[f"{key_prefix}_prob_oi"] = int(_qrow["openInterest"])
+            st.session_state[_q_sig_key] = _q_sig
+
+        if not _chain:
+            st.caption("אין שרשרת אופציות לטיקר/תאריך הזה - פרמיה, נפח ו-OI בהזנה ידנית.")
+        else:
+            def _usd(v):
+                return f"${v:,.2f}" if v is not None else "—"
+
+            def _int(v):
+                return f"{int(v):,}" if v is not None else "—"
+
+            if _q.is_live:
+                _q_grid = "".join([
+                    _metric("Bid", _usd(_qrow["bid"])),
+                    _metric("Ask", _usd(_qrow["ask"])),
+                    _metric("Mid", _usd(_q.mid)),
+                    _metric("מרווח", f"{_usd(_q.spread)} ({_q.spread_pct:.1%})"),
+                ])
+                _q_note = "הפרמיה מולאה מה-Mid (מחיר עם הוראת לימיט). במרווח רחב, מכירה מיידית תהיה קרובה יותר ל-Bid."
+            else:
+                _q_grid = _metric("Bid / Ask", "אין ציטוט חי")
+                _q_note = "אין ציטוט חי (bid=0 - כנראה מחוץ לשעות המסחר ב-US). הפרמיה לא מולאה, אין fallback ל-Last."
+            _q_grid += "".join([
+                _metric("Last", _usd(_qrow["lastPrice"])),
+                _metric("נפח", _int(_qrow["volume"])),
+                _metric("OI", _int(_qrow["openInterest"])),
+                _metric("IV (Yahoo)", f"{_qrow['impliedVolatility']:.1%}" if _qrow["impliedVolatility"] else "—"),
+            ])
+            _card(
+                f"ציטוט שוק: PUT {_chain_K:g} | {prob_exp.strftime('%d/%m/%Y')}",
+                f'<div class="rs-grid">{_q_grid}</div><div class="rs-explain">{_q_note}</div>',
+            )
+
         prob_r_pct = st.number_input("ריבית חסרת סיכון (%)", value=4.5,
                                       key=f"{key_prefix}_prob_r", help=_HELP["r"])
 
         stress_cols = st.columns(3)
         with stress_cols[0]:
-            prob_premium = st.number_input("פרמיה שהתקבלה ($)", min_value=0.01, value=2.0,
+            prob_premium = st.number_input("פרמיה שהתקבלה ($)", min_value=0.01,
                                             key=f"{key_prefix}_prob_premium", help=_HELP["iv_price"])
         with stress_cols[1]:
             prob_contracts = st.number_input("מספר חוזים", min_value=1, value=1,
@@ -723,10 +810,10 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                                             key=f"{key_prefix}_prob_capital", help=_HELP["capital"])
         liq_cols = st.columns(2)
         with liq_cols[0]:
-            prob_volume = st.number_input("נפח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0, value=0,
+            prob_volume = st.number_input("נפח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0,
                                            key=f"{key_prefix}_prob_volume")
         with liq_cols[1]:
-            prob_oi = st.number_input("עניין פתוח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0, value=0,
+            prob_oi = st.number_input("עניין פתוח (מ-Yahoo/הברוקר, אופציונלי)", min_value=0,
                                        key=f"{key_prefix}_prob_oi")
 
         # --- רגל הגנה ל-Bull Put Spread - לצורך השוואת הון/ביטחונות למטה --------
