@@ -727,6 +727,16 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         st.session_state.setdefault(f"{key_prefix}_prob_volume", 0)
         st.session_state.setdefault(f"{key_prefix}_prob_oi", 0)
 
+        # IV למודל: ברירת מחדל ATM IV; IV מה-Mid מוחל כאן (נקבע בריצה הקודמת, למטה)
+        _prob_iv_live = _try_fetch_atm_iv(ticker)
+        _sig_key = f"{key_prefix}_prob_sigma_{ticker}"
+        _sig_src_key = f"{key_prefix}_prob_sigma_src_{ticker}"
+        _sig_snap = st.session_state.pop(f"{key_prefix}_prob_sigma_snap", None)
+        if _sig_snap is not None:
+            st.session_state[_sig_key] = _sig_snap[0]
+            st.session_state[_sig_src_key] = _sig_snap
+        st.session_state.setdefault(_sig_key, float(round(_prob_iv_live, 1)) if _prob_iv_live else 30.0)
+
         cols = st.columns(4)
         with cols[0]:
             prob_S = st.number_input("מחיר נכס (S)", min_value=0.01, value=float(round(spot_default, 2)),
@@ -738,14 +748,17 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             prob_days, prob_exp = _expiry_input("תאריך פקיעה", f"{key_prefix}_prob_exp", ticker,
                                                 help=_HELP["days"])
         with cols[3]:
-            _prob_iv_live = _try_fetch_atm_iv(ticker)
             prob_sigma_pct = st.number_input(
                 "IV למודל (%)", min_value=0.1,
-                value=float(round(_prob_iv_live, 1)) if _prob_iv_live else 30.0,
-                key=f"{key_prefix}_prob_sigma_{ticker}", help=_HELP["sigma"],
+                key=_sig_key, help=_HELP["sigma"],
             )
-            if _prob_iv_live:
-                st.caption(f"נמשך אוטומטית משוק אמיתי: {_prob_iv_live:.1f}%")
+            _sig_src = st.session_state.get(_sig_src_key)
+            if _sig_src and abs(prob_sigma_pct - _sig_src[0]) < 1e-9:
+                st.caption(_sig_src[1])
+            elif _sig_src or (_prob_iv_live and abs(prob_sigma_pct - round(_prob_iv_live, 1)) > 1e-9):
+                st.caption("הוזן ידנית")
+            elif _prob_iv_live:
+                st.caption(f"ATM IV משוק אמיתי: {_prob_iv_live:.1f}%")
 
         # --- ציטוט שוק לסטרייק/פקיעה שנבחרו ------------------------------
         _chain = _try_fetch_put_chain(ticker, prob_exp.isoformat())
@@ -756,6 +769,20 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
 
         _qrow = next((r for r in _chain if r["strike"] == _chain_K), None) if _chain_K is not None else None
         _q = quote_summary(_qrow["bid"], _qrow["ask"]) if _qrow else None
+
+        # IV מה-Mid: אותו פותר של טאב IV, על אותה פרמיה שנכנסת לשדה (מעוגלת)
+        _iv_mid = None
+        if _q is not None and _q.is_live:
+            try:
+                _iv_mid = implied_vol(
+                    "put", float(round(max(_q.mid, 0.01), 2)), S=float(prob_S), K=float(_chain_K),
+                    T=max(int(prob_days), 1) / 365.0,
+                    r=float(st.session_state.get(f"{key_prefix}_prob_r", 4.5)) / 100.0,
+                )
+            except Exception:
+                _iv_mid = None
+            if _iv_mid is not None and not (0.0 < _iv_mid < 6.0):
+                _iv_mid = None
 
         # מילוי בכוח רק כשהטיקר/הפקיעה/הסטרייק השתנו - כמו רגל ההגנה למטה
         _q_sig_key = f"{key_prefix}_prob_quote_sig"
@@ -768,6 +795,12 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             if _qrow["openInterest"] is not None:
                 st.session_state[f"{key_prefix}_prob_oi"] = int(_qrow["openInterest"])
             st.session_state[_q_sig_key] = _q_sig
+            if _iv_mid is not None:
+                _iv_pct = float(round(_iv_mid * 100, 1))
+                st.session_state[f"{key_prefix}_prob_sigma_snap"] = (
+                    _iv_pct, f"מחושב מה-Mid של PUT {_chain_K:g}: {_iv_pct:.1f}%"
+                )
+                st.rerun()
 
         if not _chain:
             st.caption("אין שרשרת אופציות לטיקר/תאריך הזה - פרמיה, נפח ו-OI בהזנה ידנית.")
@@ -793,6 +826,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 _metric("Last", _usd(_qrow["lastPrice"])),
                 _metric("נפח", _int(_qrow["volume"])),
                 _metric("OI", _int(_qrow["openInterest"])),
+                _metric("IV (מה-Mid)", f"{_iv_mid:.1%}" if _iv_mid is not None else "—"),
                 _metric("IV (Yahoo)", f"{_qrow['impliedVolatility']:.1%}" if _qrow["impliedVolatility"] else "—"),
             ])
             _card(
