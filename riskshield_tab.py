@@ -26,6 +26,7 @@ from math import log as _log
 import sqlite3
 import json
 from datetime import date as _date, timedelta as _timedelta
+from datetime import datetime
 
 from options_engine import (
     bs_greeks, norm_cdf, realized_vol, implied_vol, iv_rv_ratio, Greeks,
@@ -268,8 +269,12 @@ def _expiry_input(label: str, key: str, ticker: str, default_days: int = 30,
         target = today + _timedelta(days=default_days)
         default_idx = min(range(len(exps)),
                           key=lambda i: abs((_date.fromisoformat(exps[i]) - target).days))
-        chosen = st.selectbox(label, exps, index=default_idx, key=f"{key}_{ticker}",
-                              format_func=_fmt_exp, help=help)
+        _full_key = f"{key}_{ticker}"
+        # index= רק ביצירה הראשונה: אם הערך כבר ב-session_state (למשל "טען לחישוב"),
+        # index שאינו 0 יחד איתו גורם לאזהרת Streamlit
+        _idx_kw = {} if _full_key in st.session_state else {"index": default_idx}
+        chosen = st.selectbox(label, exps, key=_full_key,
+                              format_func=_fmt_exp, help=help, **_idx_kw)
         exp_date = _date.fromisoformat(chosen)
     else:
         exp_date = st.date_input(label, value=today + _timedelta(days=default_days),
@@ -719,6 +724,13 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         # ברירות מחדל דרך session_state ולא value= - אחרת Streamlit מזהיר
         # על widget שקיבל גם value= וגם ערך מ-Session State.
         _k_key = f"{key_prefix}_prob_K_{ticker}"
+        # "טען לחישוב" מטבלת ההשוואה: פקיעה (ISO) - לפני יצירת widget הפקיעה
+        _exp_snap = st.session_state.pop(f"{key_prefix}_prob_exp_snap", None)
+        if _exp_snap:
+            if _exp_snap in _try_fetch_expirations(ticker):
+                st.session_state[f"{key_prefix}_prob_exp_{ticker}"] = _exp_snap
+            else:
+                st.session_state[f"{key_prefix}_prob_exp_free_{ticker}"] = _date.fromisoformat(_exp_snap)
         _k_snap = st.session_state.pop(f"{key_prefix}_prob_K_snap", None)
         if _k_snap is not None:
             st.session_state[_k_key] = _k_snap
@@ -966,9 +978,21 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             _rv_rank_for_row = None
             add_col, chain_col, export_col = st.columns([1, 1, 1])
             with chain_col:
+                _band_presets = {
+                    "0.10-0.35 (ברירת מחדל)": (0.10, 0.35),
+                    "0.15-0.30 (צר)": (0.15, 0.30),
+                    "0.05-0.50 (רחב)": (0.05, 0.50),
+                }
+                _band_label = st.selectbox(
+                    "טווח דלתא", list(_band_presets), key=f"{key_prefix}_compare_band_preset",
+                    help="אילו סטרייקים נטענים מהשרשרת, לפי דלתא (ערך מוחלט). 0.10-0.35 הוא "
+                         "האזור המקובל למכירת פוט. בפקיעה קרובה (ימים ספורים) הדלתא משתנה מהר "
+                         "בין סטרייקים, אז נכנסים פחות סטרייקים לכל טווח.",
+                )
+                _band = _band_presets[_band_label]
                 if st.button(
                     "📥 מלא מהשרשרת", key=f"{key_prefix}_compare_chain",
-                    help="טוען לטבלה את כל הסטרייקים בטווח דלתא 0.10-0.35 (עד 10) לתאריך הפקיעה "
+                    help="טוען לטבלה את כל הסטרייקים בטווח הדלתא שנבחר (עד 10) לתאריך הפקיעה "
                          "שנבחר. לכל סטרייק IV מה-Mid שלו עצמו. דורש ציטוט חי (שעות מסחר בארה\"ב).",
                 ):
                     _c_chain = _try_fetch_put_chain(ticker, prob_exp.isoformat())
@@ -981,12 +1005,13 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     _c_rows = chain_strike_rows(
                         _c_chain, S=float(prob_S), dte_days=int(prob_days),
                         r=prob_r_pct / 100.0, daily_log_returns=_c_rets,
+                        delta_band=(float(_band[0]), float(_band[1])),
                     )
                     if not _c_chain:
                         st.session_state[f"{key_prefix}_compare_chain_msg"] = "אין שרשרת אופציות לטיקר/תאריך הזה."
                     elif not _c_rows:
                         st.session_state[f"{key_prefix}_compare_chain_msg"] = (
-                            "אין סטרייקים עם ציטוט חי בטווח דלתא 0.10-0.35 "
+                            f"אין סטרייקים עם ציטוט חי בטווח דלתא {_band[0]:.2f}-{_band[1]:.2f} "
                             "(מחוץ לשעות המסחר ה-Bid הוא 0)."
                         )
                     else:
@@ -1366,13 +1391,32 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     unsafe_allow_html=True,
                 )
 
-                del_col1, del_col2 = st.columns([3, 1])
+                del_col1, load_col, del_col2 = st.columns([3, 1, 1])
+                with load_col:
+                    st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+                    _load_clicked = st.button(
+                        "🔍 טען לחישוב", key=f"{key_prefix}_compare_load_btn",
+                        help="מציב את הסטרייק (ואת תאריך הפקיעה שלו) למעלה. פרמיה ו-IV מתמלאים "
+                             "מה-Mid, והחישוב רץ מחדש.",
+                    )
                 with del_col1:
                     _strike_to_delete = st.selectbox(
-                        "מחיקת שורה - בחרי סטרייק",
+                        "בחרי סטרייק (טעינה לחישוב / מחיקה)",
                         options=[r["סטרייק"] for r in _rows_for_ticker],
                         key=f"{key_prefix}_compare_del_select",
                     )
+                if _load_clicked and _strike_to_delete is not None:
+                    _sel = next((r for r in _rows_for_ticker if r["סטרייק"] == _strike_to_delete), None)
+                    if _sel is not None:
+                        st.session_state[f"{key_prefix}_prob_K_snap"] = float(_sel["סטרייק"])
+                        if _sel.get("פקיעה"):
+                            try:
+                                st.session_state[f"{key_prefix}_prob_exp_snap"] = (
+                                    datetime.strptime(_sel["פקיעה"], "%d/%m/%Y").date().isoformat()
+                                )
+                            except ValueError:
+                                pass
+                        st.rerun()
                 with del_col2:
                     st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
                     if st.button("🗑️ מחק", key=f"{key_prefix}_compare_del_btn"):
