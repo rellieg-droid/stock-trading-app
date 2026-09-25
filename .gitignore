@@ -27,3 +27,9 @@ img.png
 combo_strategies.json
 combo_capital_ledger.json
 *.bak
+
+# patch scripts (one-off, history lives in commits)
+patch_*.py
+
+# Streamlit secrets
+.streamlit/secrets.toml*
