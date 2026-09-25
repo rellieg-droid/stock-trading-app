@@ -38,7 +38,7 @@ from options_engine import (
     short_put_breakeven,
     size_position, Position, Leg,
     bull_put_spread, CONTRACT_MULTIPLIER,
-    quote_summary, nearest_strike, chain_strike_rows,
+    quote_summary, nearest_strike, chain_strike_rows, compare_summary,
 )
 
 from put_tracker_tab import render_put_tracker_tab
@@ -495,7 +495,12 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
         unsafe_allow_html=True,
     )
 
-    ticker = st.text_input("טיקר (לצורך מילוי ראשוני בלבד)", value=default_ticker, key=f"{key_prefix}_ticker")
+    # "בדוק ב-OTM" מהסורק: הטיקר מוחל כאן, לפני יצירת השדה
+    _t_pending = st.session_state.pop(f"{key_prefix}_ticker_pending", None)
+    if _t_pending:
+        st.session_state[f"{key_prefix}_ticker"] = _t_pending
+    st.session_state.setdefault(f"{key_prefix}_ticker", default_ticker)
+    ticker = st.text_input("טיקר (לצורך מילוי ראשוני בלבד)", key=f"{key_prefix}_ticker")
 
     with st.expander("📖 מדריך: מה ההבדל בין הטאבים, ומה זה אומר"):
         st.markdown(
@@ -1391,6 +1396,98 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     unsafe_allow_html=True,
                 )
 
+                # --- סיכום הטבלה: עובדות והתראות, לא המלצה -------------------------
+                _sum = compare_summary(
+                    [
+                        dict(
+                            strike=r["סטרייק"], premium=r.get("פרמיה"), breakeven=r.get("Breakeven"),
+                            prob_model=r.get("הסתברות מודל (%)"), fat_tail=r.get("Fat-tail (%)"),
+                            xem=r.get("מרחק (xEM)"), iv=r.get("IV (%)"), spread_pct=r.get("מרווח (%)"),
+                            low_liquidity=str(r.get("נזילות", "")).startswith("⚠️"),
+                            expiry=r.get("פקיעה"),
+                        )
+                        for r in _rows_for_ticker
+                        if all(r.get(k) is not None for k in ("פרמיה", "Breakeven", "הסתברות מודל (%)", "IV (%)"))
+                    ],
+                    S=float(prob_S),
+                )
+                if _sum is not None:
+                    def _b(s):
+                        return f"<bdi>{s}</bdi>"
+
+                    def _ks(ks):
+                        return ", ".join(_b(f"{k:g}") for k in ks)
+
+                    _sec = []
+                    # 1. הבסיס
+                    _l = [
+                        f"פרמיה (למניה): {_b(f'${_sum.premium_range[0]:.2f}')} בסטרייק {_b(f'{_sum.strikes[0]:g}')} "
+                        f"עד {_b(f'${_sum.premium_range[1]:.2f}')} בסטרייק {_b(f'{_sum.strikes[-1]:g}')}",
+                        f"Breakeven: {_b(f'${_sum.breakeven_range[0]:.2f}')} עד {_b(f'${_sum.breakeven_range[1]:.2f}')}",
+                    ]
+                    if _sum.drop_to_breakeven_pct:
+                        _l.append(
+                            f"המניה צריכה לרדת {_b(f'{_sum.drop_to_breakeven_pct[1]:.1f}%')} עד "
+                            f"{_b(f'{_sum.drop_to_breakeven_pct[0]:.1f}%')} לפני שיש הפסד"
+                        )
+                    _sec.append(("הבסיס: מה מקבלים ומה מסכנים", _l))
+                    # 2. הסיכון
+                    _l = [
+                        f"הסתברות OTM (מודל): {_b(f'{_sum.prob_model_range[0]:.1f}%')} בסטרייק הנמוך עד "
+                        f"{_b(f'{_sum.prob_model_range[1]:.1f}%')} בגבוה",
+                    ]
+                    if _sum.fat_below_model:
+                        _l.append(
+                            f"⚠️ Fat-tail נמוך מהמודל בסטרייקים {_ks(_sum.fat_below_model)}: "
+                            "ההיסטוריה של המניה מראה יותר סיכון ממה שהמודל מניח"
+                        )
+                    if _sum.outside_em:
+                        _l.append(f"מחוץ לתזוזה הצפויה (xEM 1 ומעלה): {_ks(_sum.outside_em)}")
+                    if _sum.inside_em:
+                        _l.append(f"בתוך התזוזה הצפויה (xEM מתחת ל-1): {_ks(_sum.inside_em)}")
+                    _sec.append(("הסיכון, בשלוש דרכים", _l))
+                    # 3. מה המספרים האחרים אומרים
+                    _skew_txt = {
+                        "down": "יורד ככל שהסטרייק עולה (skew: השוק גובה יותר על ביטוח מירידות חדות)",
+                        "up": "עולה ככל שהסטרייק עולה (חריג לפוטים - כדאי לבדוק את הציטוטים)",
+                        "flat": "כמעט זהה בכל הסטרייקים",
+                    }[_sum.skew]
+                    _l = [f"IV {_b(f'{_sum.iv_range[0]:.1f}%')} עד {_b(f'{_sum.iv_range[1]:.1f}%')}: {_skew_txt}"]
+                    if _sum.spread_range:
+                        _l.append(
+                            f"מרווח Bid/Ask: {_b(f'{_sum.spread_range[0]:.1f}%')} עד {_b(f'{_sum.spread_range[1]:.1f}%')}"
+                        )
+                    if _sum.wide_spread:
+                        _l.append(f"⚠️ מרווח רחב (10% ומעלה) בסטרייקים {_ks(_sum.wide_spread)}: הפרמיה בפועל קרובה יותר ל-Bid")
+                    if _sum.low_liquidity:
+                        _l.append(f"⚠️ נזילות נמוכה בסטרייקים {_ks(_sum.low_liquidity)}")
+                    elif not _sum.wide_spread:
+                        _l.append("נזילות תקינה בכל הסטרייקים")
+                    if _sum.mixed_expiries:
+                        _l.append("⚠️ בטבלה יש שורות מתאריכי פקיעה שונים - ההשוואה ביניהן לא ישירה")
+                    _sec.append(("מה המספרים האחרים אומרים", _l))
+                    # 4. ה-trade-off
+                    _l = []
+                    for _st in _sum.steps:
+                        _per = (f", {_b(f'${_st.premium_per_pt:.2f}')} לכל נקודה"
+                                if _st.premium_per_pt is not None else "")
+                        _l.append(
+                            f"מ-{_b(f'{_st.from_strike:g}')} ל-{_b(f'{_st.to_strike:g}')}: "
+                            f"פרמיה {_b(f'+${_st.premium_add:.2f}')}, הסתברות יורדת ב-{_b(f'{_st.prob_drop_pts:.1f}')} נקודות{_per}"
+                        )
+                    _sec.append(("ה-trade-off בין סטרייקים סמוכים", _l))
+
+                    _html = "".join(
+                        f'<div style="margin-top:10px;"><b>{t}</b><ul style="margin:4px 0 0 0;">'
+                        + "".join(f"<li>{x}</li>" for x in items) + "</ul></div>"
+                        for t, items in _sec
+                    )
+                    _card(
+                        f"סיכום הטבלה - {ticker}",
+                        _html + '<div class="rs-explain">עובדות מהטבלה בלבד, לא המלצה. '
+                                'איזה צעד "שווה את זה" - ההחלטה שלך.</div>',
+                    )
+
                 del_col1, load_col, del_col2 = st.columns([3, 1, 1])
                 with load_col:
                     st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
@@ -1762,6 +1859,39 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     unsafe_allow_html=True,
                 )
                 st.caption(f"{len(scr_view)} מתוך {len(scr_df)} טיקרים מוצגים.")
+
+                # --- מעבר לבדיקה לעומק בטאב הסתברות OTM ------------------------
+                _scr_ok = (scr_view[scr_view["strike"].notna()]
+                           if "strike" in scr_view.columns else scr_view.iloc[0:0])
+                if not _scr_ok.empty:
+                    go_cols = st.columns([3, 1])
+                    with go_cols[0]:
+                        _go_t = st.selectbox(
+                            "בדיקה לעומק של מניה", _scr_ok["ticker"].tolist(),
+                            key=f"{key_prefix}_scr_go_select",
+                        )
+                    with go_cols[1]:
+                        st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+                        if st.button(
+                            "🔍 בדוק ב-OTM", key=f"{key_prefix}_scr_go_btn",
+                            help="טוען לטאב הסתברות OTM את הטיקר, הסטרייק של הסורק ותאריך הפקיעה "
+                                 "האמיתי הקרוב. פרמיה ו-IV מתמלאים מציטוט השוק.",
+                        ):
+                            _go_row = _scr_ok[_scr_ok["ticker"] == _go_t].iloc[0]
+                            st.session_state[f"{key_prefix}_ticker_pending"] = _go_t
+                            st.session_state[f"{key_prefix}_prob_K_snap"] = float(_go_row["strike"])
+                            _go_exps = _try_fetch_expirations(_go_t)
+                            st.session_state[f"{key_prefix}_prob_exp_snap"] = (
+                                min(_go_exps, key=lambda e: abs((_date.fromisoformat(e) - _scr_exp).days))
+                                if _go_exps else _scr_exp.isoformat()
+                            )
+                            st.session_state[f"{key_prefix}_scr_go_msg"] = (
+                                f"{_go_t} נטען. עברי ללשונית 'הסתברות OTM (Put)' ולחצי 'חשב'."
+                            )
+                            st.rerun()
+                    _go_msg = st.session_state.pop(f"{key_prefix}_scr_go_msg", None)
+                    if _go_msg:
+                        st.success(_go_msg)
 
     with tab_tracker:
         render_put_tracker_tab()

@@ -1259,3 +1259,106 @@ def chain_strike_rows(
     if len(rows) > max_rows:
         rows = sorted(rows, key=lambda x: abs(x.delta - band_mid))[:max_rows]
     return sorted(rows, key=lambda x: x.strike)
+
+
+# =============================================================================
+# 10. סיכום טבלת ההשוואה - עובדות והתראות, לא המלצה
+# =============================================================================
+#
+# הקלט: שורה לכל סטרייק (dict), באחוזים כמו בטבלה (87.6 ולא 0.876).
+# מפתחות: strike, premium, breakeven, prob_model, fat_tail (או None),
+# xem (או None), iv, spread_pct (או None), low_liquidity (bool), expiry (או None).
+
+FAT_TAIL_GAP_PTS = 1.0      # Fat-tail נמוך מהמודל בנקודה ומעלה -> התראה
+WIDE_SPREAD_PCT = 10.0      # מרווח Bid/Ask מ-10% ומעלה -> התראה
+
+
+@dataclass(frozen=True)
+class CompareStep:
+    from_strike: float
+    to_strike: float
+    premium_add: float          # כמה פרמיה נוספת (למניה)
+    prob_drop_pts: float        # כמה נקודות הסתברות OTM יורדות (חיובי = ירידה)
+    premium_per_pt: float | None  # פרמיה נוספת לכל נקודת הסתברות שמוותרים עליה
+
+
+@dataclass(frozen=True)
+class CompareSummary:
+    n: int
+    strikes: tuple[float, ...]
+    premium_range: tuple[float, float]          # (סטרייק נמוך, סטרייק גבוה)
+    breakeven_range: tuple[float, float]
+    drop_to_breakeven_pct: tuple[float, float] | None   # כמה המניה צריכה לרדת עד האיזון
+    prob_model_range: tuple[float, float]
+    fat_below_model: tuple[float, ...]          # סטרייקים שבהם ההיסטוריה מסוכנת מהמודל
+    outside_em: tuple[float, ...]               # xEM >= 1 - מחוץ לתזוזה הצפויה
+    inside_em: tuple[float, ...]
+    iv_range: tuple[float, float]               # (סטרייק נמוך, סטרייק גבוה)
+    skew: str                                   # "down" (IV יורד כשהסטרייק עולה) / "up" / "flat"
+    low_liquidity: tuple[float, ...]
+    wide_spread: tuple[float, ...]
+    spread_range: tuple[float, float] | None
+    mixed_expiries: bool
+    steps: tuple[CompareStep, ...]
+
+
+def compare_summary(rows: Sequence[dict], S: float | None = None) -> CompareSummary | None:
+    """None אם יש פחות מ-2 סטרייקים (בלי השוואה אין trade-off)."""
+    rs = sorted((r for r in rows or () if r.get("strike") is not None), key=lambda r: float(r["strike"]))
+    if len(rs) < 2:
+        return None
+    lo, hi = rs[0], rs[-1]
+    strikes = tuple(float(r["strike"]) for r in rs)
+
+    def _num(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if isfinite(f) else None
+
+    drop = None
+    if S and S > 0:
+        drop = ((S - float(lo["breakeven"])) / S * 100.0, (S - float(hi["breakeven"])) / S * 100.0)
+
+    fat_below = tuple(
+        float(r["strike"]) for r in rs
+        if _num(r.get("fat_tail")) is not None
+        and _num(r.get("fat_tail")) <= float(r["prob_model"]) - FAT_TAIL_GAP_PTS
+    )
+    xems = [(float(r["strike"]), _num(r.get("xem"))) for r in rs]
+    outside = tuple(k for k, x in xems if x is not None and x >= 1.0)
+    inside = tuple(k for k, x in xems if x is not None and x < 1.0)
+
+    iv_lo, iv_hi = float(lo["iv"]), float(hi["iv"])
+    skew = "flat" if abs(iv_lo - iv_hi) < 0.5 else ("down" if iv_lo > iv_hi else "up")
+
+    spreads = [(float(r["strike"]), _num(r.get("spread_pct"))) for r in rs]
+    spread_vals = [s for _, s in spreads if s is not None]
+
+    expiries = {r.get("expiry") for r in rs if r.get("expiry")}
+
+    steps = []
+    for a, b in zip(rs, rs[1:]):
+        add = float(b["premium"]) - float(a["premium"])
+        drop_pts = float(a["prob_model"]) - float(b["prob_model"])
+        steps.append(CompareStep(
+            from_strike=float(a["strike"]), to_strike=float(b["strike"]),
+            premium_add=add, prob_drop_pts=drop_pts,
+            premium_per_pt=(add / drop_pts) if drop_pts > 0 else None,
+        ))
+
+    return CompareSummary(
+        n=len(rs), strikes=strikes,
+        premium_range=(float(lo["premium"]), float(hi["premium"])),
+        breakeven_range=(float(lo["breakeven"]), float(hi["breakeven"])),
+        drop_to_breakeven_pct=drop,
+        prob_model_range=(float(lo["prob_model"]), float(hi["prob_model"])),
+        fat_below_model=fat_below, outside_em=outside, inside_em=inside,
+        iv_range=(iv_lo, iv_hi), skew=skew,
+        low_liquidity=tuple(float(r["strike"]) for r in rs if r.get("low_liquidity")),
+        wide_spread=tuple(k for k, s in spreads if s is not None and s >= WIDE_SPREAD_PCT),
+        spread_range=(min(spread_vals), max(spread_vals)) if spread_vals else None,
+        mixed_expiries=len(expiries) > 1,
+        steps=tuple(steps),
+    )
