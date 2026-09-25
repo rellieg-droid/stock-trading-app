@@ -6,16 +6,19 @@ options_engine.py
 מקבל מספרים, מחזיר מספרים. ניתן לבדיקה מלאה ב-pytest.
 
 תלויות: ספריית התקן של פייתון בלבד.
-מקור אמת (source of truth): rellieg-droid/options-analysis.
-שינויים בלוגיקה שייכים לשם קודם, ומסונכרנים לכאן ידנית.
+מקור אמת (source of truth): הקובץ הזה, ב-rellieg-droid/stock-trading-app.
+הריפו options-analysis כבר לא בשימוש - אין סנכרון ידני לשום מקום.
 
 מבנה
 ----
-1. Black-Scholes  : מחיר וגריקס לאופציה בודדת
+1. Black-Scholes  : מחיר וגריקס, IV/RV, RV Rank, תזוזה צפויה, הסתברות היסטורית ו-Fat-tail
 2. היפוך דלתא     : סטרייק מדלתא רצויה (מחליף את current_price * (1 - delta))
-3. מודל הרגליים   : Leg / Position, ומהן נגזרות כל האסטרטגיות
-4. עקומת תשלום    : payoff, max_loss, max_profit, breakevens
+3. מודל הרגליים   : Leg / Position - payoff, max_loss, max_profit, breakevens
+4. תבניות         : אסטרטגיות מוכנות (כולל bull_put_spread) + טבלת הגנה
 5. מנוע הסיכון    : חוק ה-1% + רצפת תיק, שני דליים נפרדים
+6. סטרס ו-CVaR    : תרחישי ירידה והפסד בזנב לשורט-פוט
+7. סורק רב-מניות  : שורה לכל טיקר, מעל הפונקציות הקיימות
+8. ציטוט שוק      : Mid/מרווח מ-bid/ask, הסטרייק הקרוב בשרשרת
 """
 
 from __future__ import annotations
