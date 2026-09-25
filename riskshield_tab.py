@@ -110,7 +110,7 @@ _HELP = {
             "put = אופציית מכירה (רווח כשהמניה יורדת מתחת לסטרייק).",
     "S": "מחיר הנכס הבסיס (המניה) כרגע בשוק.",
     "K": "מחיר המימוש. ההפרש בין מחיר הנכס לסטרייק קובע אם האופציה בכסף (ITM) או מחוצה לו (OTM).",
-    "days": "מספר הימים עד לפקיעת האופציה. המודל ממיר את זה לשברי שנה (30 יום = 30/365).",
+    "days": "תאריך פקיעת האופציה. כשיש שרשרת אופציות לטיקר, מוצגים רק תאריכי פקיעה אמיתיים. המודל ממיר את הזמן עד הפקיעה לשברי שנה.",
     "sigma": "התנודתיות הגלומה (IV) - כמה תנועה השוק מצפה מהמניה, לפי המחיר שהוא מוכן לשלם על האופציה עצמה.",
     "r": "ריבית חסרת סיכון (כמו תשואת אג\"ח ממשלתי קצר). משפיעה קלות על תמחור האופציה.",
     "q": "תשואת דיבידנד שנתית של המניה. דיבידנד מוריד את מחיר ה-call (כי בעל המניה מקבל אותו, לא בעל האופציה).",
@@ -213,6 +213,48 @@ def _try_fetch_closes(ticker: str, period: str = "1y") -> Optional[list]:
         return hist["Close"].tolist()
     except Exception:
         return None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)  # RS_CACHE_V1
+def _try_fetch_expirations(ticker: str) -> list:
+    """תאריכי פקיעה אמיתיים מהשרשרת (yfinance), רק עתידיים. רשימה ריקה אם אין."""
+    if not ticker:
+        return []
+    try:
+        import yfinance as yf
+        today = _date.today()
+        return [e for e in (yf.Ticker(ticker).options or ())
+                if (_date.fromisoformat(e) - today).days >= 1]
+    except Exception:
+        return []
+
+
+def _fmt_exp(e: str) -> str:
+    return _date.fromisoformat(e).strftime("%d/%m/%Y")
+
+
+def _expiry_input(label: str, key: str, ticker: str, default_days: int = 30,
+                  help: Optional[str] = None):
+    """
+    בחירת תאריך פקיעה במקום "ימים לפקיעה". יש שרשרת לטיקר -> selectbox
+    מתאריכי הפקיעה האמיתיים (ברירת מחדל: הקרוב ל-default_days). אין שרשרת
+    (או סורק רב-מניות, ticker="") -> בחירת תאריך חופשית.
+    מחזירה (ימים, תאריך) - החישובים ממשיכים לעבוד בימים.
+    """
+    today = _date.today()
+    exps = _try_fetch_expirations(ticker)
+    if exps:
+        target = today + _timedelta(days=default_days)
+        default_idx = min(range(len(exps)),
+                          key=lambda i: abs((_date.fromisoformat(exps[i]) - target).days))
+        chosen = st.selectbox(label, exps, index=default_idx, key=f"{key}_{ticker}",
+                              format_func=_fmt_exp, help=help)
+        exp_date = _date.fromisoformat(chosen)
+    else:
+        exp_date = st.date_input(label, value=today + _timedelta(days=default_days),
+                                 min_value=today + _timedelta(days=1),
+                                 key=f"{key}_free_{ticker}", format="DD/MM/YYYY", help=help)
+    return max(1, (exp_date - today).days), exp_date
 
 
 @st.cache_data(ttl=600, show_spinner=False)  # RS_CACHE_V1
@@ -466,8 +508,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             unsafe_allow_html=True,
         )
 
-    tab_bs, tab_iv, tab_rv, tab_prob, tab_screener, tab_tracker = st.tabs(
-        ["מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)", "הסתברות OTM (Put)", "סורק רב-מניות", "📒 מעקב פרמיות"]
+    tab_screener, tab_prob, tab_tracker, tab_bs, tab_iv, tab_rv = st.tabs(
+        ["סורק רב-מניות", "הסתברות OTM (Put)", "📒 מעקב פרמיות", "מחיר וגריקס", "תנודתיות גלומה (IV)", "תנודתיות ממומשת (RV)"]
     )
 
     # -------------------------------------------------------------------
@@ -485,8 +527,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default, 2)),
                                  key=f"{key_prefix}_bs_K_{ticker}", help=_HELP["K"])
         with cols[3]:
-            days = st.number_input("ימים לפקיעה", min_value=1, value=30,
-                                    key=f"{key_prefix}_bs_days", help=_HELP["days"])
+            days, _bs_exp = _expiry_input("תאריך פקיעה", f"{key_prefix}_bs_exp", ticker,
+                                          help=_HELP["days"])
         with cols[4]:
             _bs_iv_live = _try_fetch_atm_iv(ticker)
             sigma_pct = st.number_input(
@@ -551,8 +593,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             iv_K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default, 2)),
                                     key=f"{key_prefix}_iv_K_{ticker}", help=_HELP["K"])
         with cols[4]:
-            iv_days = st.number_input("ימים לפקיעה", min_value=1, value=30,
-                                       key=f"{key_prefix}_iv_days", help=_HELP["days"])
+            iv_days, _iv_exp = _expiry_input("תאריך פקיעה", f"{key_prefix}_iv_exp", ticker,
+                                             help=_HELP["days"])
 
         iv_r_pct = st.number_input("ריבית חסרת סיכון (%)", value=4.5,
                                     key=f"{key_prefix}_iv_r", help=_HELP["r"])
@@ -654,8 +696,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             prob_K = st.number_input("סטרייק (K)", min_value=0.01, value=float(round(spot_default * 0.9, 2)),
                                       key=f"{key_prefix}_prob_K_{ticker}", help=_HELP["K"])
         with cols[2]:
-            prob_days = st.number_input("ימים לפקיעה", min_value=1, value=30,
-                                         key=f"{key_prefix}_prob_days", help=_HELP["days"])
+            prob_days, prob_exp = _expiry_input("תאריך פקיעה", f"{key_prefix}_prob_exp", ticker,
+                                                help=_HELP["days"])
         with cols[3]:
             _prob_iv_live = _try_fetch_atm_iv(ticker)
             prob_sigma_pct = st.number_input(
@@ -910,8 +952,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
             # --- בדיקות מול ספים נפוצים: DTE, יחס קרדיט/רוחב, נזילות -------
             _dte_badge_cls = "green" if 30 <= int(prob_days) <= 45 else "gray"
             _dte_badge = (
-                f'<span class="rs-badge {_dte_badge_cls}">DTE: {int(prob_days)} ימים '
-                f'(טווח 30-45 נפוץ לשחיקת תטא)</span>'
+                f'<span class="rs-badge {_dte_badge_cls}">פקיעה: {prob_exp.strftime("%d/%m/%Y")} '
+                f'(טווח 30-45 יום נפוץ לשחיקת תטא)</span>'
             )
 
             _width = prob_K - prob_protect_K
@@ -1304,8 +1346,8 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                 ),
             )
         with scr_cols[1]:
-            scr_dte = st.number_input(
-                "ימים לפקיעה", min_value=1, value=30, key=f"{key_prefix}_scr_dte",
+            scr_dte, _scr_exp = _expiry_input(
+                "תאריך פקיעה", f"{key_prefix}_scr_exp", "", help=_HELP["days"],
             )
         with scr_cols[2]:
             scr_period = st.selectbox(
@@ -1392,7 +1434,7 @@ def render_riskshield_tab(key_prefix: str = "riskshield", default_ticker: str = 
                     "prob_otm_fat_tail": "אותה הסתברות OTM, לפי מודל עם \'זנבות שמנים\' (t-Student) במקום נורמלית.",
                     "prob_otm_historical": "הסתברות OTM לפי מה שקרה בפועל בהיסטוריה, לא לפי מודל תיאורטי.",
                     "xem_distance": "כמה \'תזוזות צפויות\' רחוק הסטרייק מהמחיר הנוכחי.",
-                    "cvar_5pct": "ממוצע ה-P/L ב-5% התרחישים ההיסטוריים הגרועים ביותר, לתקופה של dte_days ימים.",
+                    "cvar_5pct": "ממוצע ה-P/L ב-5% התרחישים ההיסטוריים הגרועים ביותר, לתקופה עד תאריך הפקיעה שנבחר.",
                     "max_loss": "ההפסד המקסימלי התיאורטי בפוזיציה (סטרייק פחות פרמיה, כפול 100 כפול חוזים).",
                 }
 
