@@ -41,7 +41,7 @@ div:has(> #pt-symbol-marker) + div input {
 
 
 def _pull_from_otm_tab(key_prefix: str) -> bool:
-    """Copy symbol/strike/premium/spot/days from the OTM Probability tab's
+    """Copy symbol/strike/premium/spot/expiry date from the OTM Probability tab's
     session_state into this tab's form fields. Returns True if a ticker
     was found to pull from."""
     ticker = st.session_state.get(f"{key_prefix}_ticker", "")
@@ -51,7 +51,9 @@ def _pull_from_otm_tab(key_prefix: str) -> bool:
     strike = st.session_state.get(f"{key_prefix}_prob_K_{ticker}")
     premium = st.session_state.get(f"{key_prefix}_prob_premium")
     stock_price = st.session_state.get(f"{key_prefix}_prob_S_{ticker}")
-    days = st.session_state.get(f"{key_prefix}_prob_days")
+    # טאב OTM: selectbox מהשרשרת (מחרוזת ISO) או date_input חופשי כשאין שרשרת
+    exp_raw = (st.session_state.get(f"{key_prefix}_prob_exp_{ticker}")
+               or st.session_state.get(f"{key_prefix}_prob_exp_free_{ticker}"))
 
     st.session_state["pt_symbol"] = ticker.upper()
     if strike is not None:
@@ -61,8 +63,10 @@ def _pull_from_otm_tab(key_prefix: str) -> bool:
     if stock_price is not None:
         st.session_state["pt_stock_price"] = float(stock_price)
     st.session_state["pt_sale_date"] = date.today()
-    if days is not None:
-        st.session_state["pt_expiration_date"] = date.today() + timedelta(days=int(days))
+    if isinstance(exp_raw, str):
+        st.session_state["pt_expiration_date"] = date.fromisoformat(exp_raw)
+    elif isinstance(exp_raw, date):
+        st.session_state["pt_expiration_date"] = exp_raw
     return True
 
 
@@ -108,7 +112,7 @@ def render_put_tracker_tab(key_prefix: str = "riskshield", db_path: str = tracke
                 else:
                     st.warning("לא נמצא טיקר בטאב 'הסתברות OTM' — מלאי שם מניה שם קודם")
         with hint_col:
-            st.caption("שולף סימבול, סטרייק, פרמיה, מחיר מניה וימים-לפקיעה מהטאב 'הסתברות OTM (Put)'")
+            st.caption("שולף סימבול, סטרייק, פרמיה, מחיר מניה ותאריך פקיעה מהטאב 'הסתברות OTM (Put)'")
 
         with st.form("add_put_form", clear_on_submit=True):
             fc1, fc2, fc3 = st.columns(3)
