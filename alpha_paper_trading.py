@@ -6299,6 +6299,10 @@ for _ in _tab_body("tabbody_trade"):
                         st.rerun()
             cp_ = get_live_price(ticker)
             if cp_:
+                try:
+                    from explanations import HELP as _HELP
+                except Exception:
+                    _HELP = {}
                 ci, ct_ = st.columns(2)
                 with ci:
                     st.markdown(
@@ -6310,14 +6314,14 @@ for _ in _tab_body("tabbody_trade"):
                         f'<div style="color:#8b949e;font-size:.74rem;">{ticker} · {company} {il}</div>'
                         f'</div>', unsafe_allow_html=True
                     )
-                    st.metric("מזומן", f"${pf['cash']:,.2f}")
+                    st.metric("מזומן", f"${pf['cash']:,.2f}", help=_HELP.get("cash"))
                     if ticker in pf['positions']:
                         pos = pf['positions'][ticker]
                         pg  = (cp_ - pos['avg_price']) / pos['avg_price'] * 100
-                        st.metric(f"אחזקה", f"{pos['shares']} מניות ({sym}{pos['shares']*cp_:,.2f})", f"{pg:+.1f}%")
+                        st.metric(f"אחזקה", f"{pos['shares']} מניות ({sym}{pos['shares']*cp_:,.2f})", f"{pg:+.1f}%", help=_HELP.get("holding"))
                 with ct_:
-                    act = st.radio("פעולה:", ["🟢 קנייה", "🔴 מכירה"], horizontal=True)
-                    si_ = st.number_input("כמות:", min_value=1, max_value=1000, value=1)
+                    act = st.radio("פעולה:", ["🟢 קנייה", "🔴 מכירה"], horizontal=True, help=_HELP.get("action"))
+                    si_ = st.number_input("כמות:", min_value=1, max_value=1000, value=1, help=_HELP.get("quantity"))
                     tv_ = si_ * cp_
                     st.markdown(
                         f'<div style="background:#161b22;border:1px solid #21262d;'
@@ -6329,16 +6333,32 @@ for _ in _tab_body("tabbody_trade"):
                         f'<span style="color:#e6edf3;font-weight:700;">{sym}{tv_:,.2f}</span></div>'
                         f'</div>', unsafe_allow_html=True
                     )
-                    nt_ = st.text_input("הערה:", placeholder="סיבה לעסקה")
+                    # --- מה יקרה אם אלחץ (consequences.py) ---
+                    try:
+                        from consequences import build_consequences, render_consequences_html
+                        _cq_pos = pf['positions'].get(ticker)
+                        _cq = build_consequences(
+                            action="BUY" if "קנייה" in act else "SELL",
+                            symbol=ticker,
+                            shares=si_,
+                            price=cp_,
+                            held_shares=_cq_pos['shares'] if _cq_pos else 0,
+                            avg_price=_cq_pos['avg_price'] if _cq_pos else None,
+                            currency=sym,
+                        )
+                        st.markdown(render_consequences_html(_cq), unsafe_allow_html=True)
+                    except Exception as _cq_err:
+                        st.caption(f"(הסבר התוצאות לא זמין: {_cq_err})")
+                    nt_ = st.text_input("הערה:", placeholder="סיבה לעסקה", help=_HELP.get("note"))
                     if "מכירה" in act:
                         # שדות המודול הפסיכולוגי — מופיעים רק בסגירת עסקה, לא בקנייה.
                         followed_plan_ui = st.radio(
                             "עקבת אחרי תוכנית ה-ATR שלך במדויק?",
-                            ["כן", "לא"], horizontal=True, key="tr_followed_plan")
+                            ["כן", "לא"], horizontal=True, key="tr_followed_plan", help=_HELP.get("followed_plan"))
                         emotion_ui = st.selectbox(
                             "רגש עיקרי בעסקה:",
-                            list(PSYCH_EMOTION_HE.keys()), key="tr_emotion")
-                    if st.button("✅ בצע", type="primary"):
+                            list(PSYCH_EMOTION_HE.keys()), key="tr_emotion", help=_HELP.get("emotion"))
+                    if st.button("✅ בצע", type="primary", help=_HELP.get("execute")):
                         p = st.session_state.pf
                         if "קנייה" in act:
                             if p['cash'] >= tv_:
