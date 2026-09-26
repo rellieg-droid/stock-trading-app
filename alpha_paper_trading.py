@@ -2369,6 +2369,20 @@ with st.spinner(f"טוען {ticker}..."):
 
 # Error state
 if df is None:
+    # הסימול שנכשל עלול להישאר "תקוע" בשדה החיפוש - מסמנים אותו
+    st.session_state["failed_pick"] = ticker
+    # _set_ticker כבר הוסיף את הסימול ל"אחרונים" ושמר לקובץ - מסירים אותו
+    _recent = st.session_state.get("recent", [])
+    if ticker in _recent:
+        _recent.remove(ticker)
+        save_user_data()
+    _last_good = st.session_state.get("last_good_ticker")
+    if _last_good and _last_good != ticker:
+        st.session_state["ticker_fallback_msg"] = (
+            f"לא נמצאו נתונים עבור {ticker}. חזרנו ל-{_last_good}. כדאי לבדוק את הסימול."
+        )
+        st.session_state.ticker = _last_good
+        st.rerun()
     st.markdown(
         f'<div style="text-align:center;padding:60px 20px;">'
         f'<div style="font-size:3rem;">⚠️</div>'
@@ -2385,6 +2399,11 @@ if df is None:
                 st.session_state.ticker = _esc_sym
                 st.rerun()
     st.stop()
+
+st.session_state["last_good_ticker"] = ticker
+_fb_msg = st.session_state.pop("ticker_fallback_msg", None)
+if _fb_msg:
+    st.warning(f"⚠️ {_fb_msg}")
 
 # ── Derived values ──
 company  = info.get("shortName", ticker)
@@ -2494,7 +2513,13 @@ with _h_col_search:
     )
 
     # ההשוואה לטיקר הנוכחי היא מה שמונע לולאת rerun אינסופית
-    if _picked and _picked != st.session_state.ticker:
+    # סימול שכבר נכשל נשאר בשדה החיפוש; מתעלמים ממנו כדי למנוע לולאה.
+    # בחירה חדשה ושונה מנקה את הסימון, כך שאפשר לנסות שוב אחר כך.
+    _failed_pick = st.session_state.get("failed_pick")
+    if _picked and _failed_pick and _picked != _failed_pick:
+        st.session_state.pop("failed_pick", None)
+        _failed_pick = None
+    if _picked and _picked != st.session_state.ticker and _picked != _failed_pick:
         _set_ticker(_picked)
 
 
