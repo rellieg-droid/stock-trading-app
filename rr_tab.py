@@ -808,6 +808,20 @@ def _status_card_html(plan: rr.TradePlan, status) -> str:
 </div>'''
 
 
+def _default_position_index(pos, default_symbol=None):
+    """
+    מחזיר (אינדקס לבחירה, האם המניה המבוקשת חסרה בתיק).
+    אין מניה מבוקשת -> (0, False). קיימת -> (האינדקס שלה, False). חסרה -> (0, True).
+    """
+    want = (default_symbol or "").strip().upper()
+    if not want:
+        return 0, False
+    tickers = [str(p.get("ticker", "")).strip().upper() for p in pos]
+    if want in tickers:
+        return tickers.index(want), False
+    return 0, True
+
+
 def render_position_manager(
     positions=None,
     price_fetcher: Optional[Callable[[str], Optional[float]]] = None,
@@ -816,6 +830,7 @@ def render_position_manager(
     portfolio_value: float = 100_000.0,
     default_atr_mult: float = 2.0,
     key_prefix: str = "pm",
+    default_symbol: Optional[str] = None,
 ) -> Optional[rr.TradePlan]:
     """
     בוחר פוזיציה פתוחה ומציג עליה את מפת היעדים, מצב נוכחי וניהול דוח.
@@ -838,9 +853,17 @@ def render_position_manager(
 
     labels = [f"{p['ticker']} · {p['shares']:,} מניות · כניסה ${p['entry']:,.2f}"
               for p in pos]
+    _def_idx, _missing = _default_position_index(pos, default_symbol)
+    if _missing:
+        st.caption(f"אין אחזקה ב-{default_symbol}, לכן מוצגת פוזיציה אחרת מהתיק.")
     idx = st.selectbox("פוזיציה", range(len(pos)), format_func=lambda i: labels[i],
-                       key=f"{key_prefix}_sel")
+                       index=_def_idx,
+                       key=f"{key_prefix}_sel_{(default_symbol or '').upper()}",
+                       help="כאן מנהלים סטופ ויעד למניות שכבר נקנו. "
+                            "הרשימה מגיעה מהתיק. כברירת מחדל נבחרת המניה שלמעלה, אם יש בה אחזקה.")
     p = pos[idx]
+    # key נפרד לכל מניה: בלי זה Streamlit שומר ערכים של הפוזיציה הקודמת
+    key_prefix = f"{key_prefix}_{str(p['ticker']).upper()}"
 
     snap = _yf_snapshot(p["ticker"])
     live = (price_fetcher(p["ticker"]) if price_fetcher else None) or snap["price"]

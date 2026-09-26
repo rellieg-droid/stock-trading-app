@@ -6443,6 +6443,7 @@ for _ in _tab_body("tabbody_trade"):
                 earnings_fetcher=_rr_earnings_date,
                 portfolio_value=pf_val(st.session_state.pf),
                 key_prefix="pm_trade",
+                default_symbol=ticker,
             )
 
 
